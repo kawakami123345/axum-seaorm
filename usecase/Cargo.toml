@@ -1,0 +1,10 @@
+[package]
+name = "usecase"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+domain = { workspace = true }
+serde = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
