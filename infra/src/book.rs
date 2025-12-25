@@ -31,11 +31,11 @@ impl Related<super::publisher::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-pub struct RepositoryImpl {
+pub struct PostgresRepository {
     pub(crate) db: DatabaseConnection,
 }
 
-impl RepositoryImpl {
+impl PostgresRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
@@ -53,7 +53,7 @@ impl From<Model> for book::Book {
 }
 
 #[async_trait]
-impl RepositoryBase<book::Book> for RepositoryImpl {
+impl RepositoryBase<book::Book> for PostgresRepository {
     async fn find_all(&self) -> Result<Vec<book::Book>, DomainError> {
         let books = Entity::find()
             .all(&self.db)
@@ -126,4 +126,4 @@ impl RepositoryBase<book::Book> for RepositoryImpl {
 }
 
 #[async_trait]
-impl book::Repository for RepositoryImpl {}
+impl book::Repository for PostgresRepository {}

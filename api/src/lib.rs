@@ -8,14 +8,6 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
-#[openapi(components(schemas(
-    usecase::book::CreateDto,
-    usecase::book::UpdateDto,
-    usecase::book::ResponseDto,
-    usecase::publisher::CreateDto,
-    usecase::publisher::UpdateDto,
-    usecase::publisher::ResponseDto,
-)))]
 pub struct ApiDoc;
 
 pub struct AppState {
@@ -25,6 +17,7 @@ pub struct AppState {
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        // routes!はPath毎に分ける必要あり
         .routes(routes!(book::get_all, book::create))
         .routes(routes!(book::get, book::update, book::delete))
         .routes(routes!(publisher::get_all, publisher::create))
