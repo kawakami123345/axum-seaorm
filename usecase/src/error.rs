@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use domain::models::DomainError;
+use domain::DomainError;
 
 #[derive(Debug)]
 pub enum UseCaseError {
@@ -11,7 +11,7 @@ impl From<DomainError> for UseCaseError {
     fn from(err: DomainError) -> Self {
         match err {
             DomainError::NotFound => Self::NotFound,
-            DomainError::InfrastructureError(e) => Self::Internal(e),
+            DomainError::InfraError(e) => Self::Internal(e),
         }
     }
 }

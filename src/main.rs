@@ -1,8 +1,6 @@
-use api::handlers::{AppState, create_router};
-use infrastructure::repositories::{BookRepositoryImpl, PublisherRepositoryImpl};
+use api::{AppState, create_router};
 use sea_orm::Database;
 use std::sync::Arc;
-use usecase::{BookUseCase, PublisherUseCase};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,18 +11,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(db_url).await?;
 
-    // 2. Setup Schema (Automated via infrastructure)
+    // 2. Setup Schema (Automated via infra)
     #[cfg(debug_assertions)]
-    infrastructure::init_db(&db).await?;
+    infra::init_db(&db).await?;
 
     // 3. Dependency Injection
-    let book_repo = Arc::new(BookRepositoryImpl::new(db.clone()))
-        as Arc<dyn domain::interfaces::BookRepository>;
-    let publisher_repo = Arc::new(PublisherRepositoryImpl::new(db.clone()))
-        as Arc<dyn domain::interfaces::PublisherRepository>;
+    let book_repo =
+        Arc::new(infra::book::RepositoryImpl::new(db.clone())) as Arc<dyn domain::book::Repository>;
+    let publisher_repo = Arc::new(infra::publisher::RepositoryImpl::new(db.clone()))
+        as Arc<dyn domain::publisher::Repository>;
 
-    let book_usecase = BookUseCase::new(book_repo);
-    let publisher_usecase = PublisherUseCase::new(publisher_repo);
+    let book_usecase = usecase::book::Service::new(book_repo);
+    let publisher_usecase = usecase::publisher::Service::new(publisher_repo);
 
     let state = Arc::new(AppState {
         book_usecase,

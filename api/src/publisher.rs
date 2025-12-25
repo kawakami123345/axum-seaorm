@@ -1,3 +1,4 @@
+use crate::AppState;
 use axum::{
     Json,
     extract::{Path, State},
@@ -5,20 +6,17 @@ use axum::{
     response::IntoResponse,
 };
 use std::sync::Arc;
-use usecase::dtos::publisher::{PublisherCreateDto, PublisherResponseDto, PublisherUpdateDto};
-use usecase::map_error;
-
-use crate::handlers::AppState;
+use usecase::error::map_error;
 
 #[utoipa::path(
     get,
     path = "/publishers",
     responses(
-        (status = 200, description = "List all publishers", body = [PublisherResponseDto])
+        (status = 200, description = "List all publishers", body = [usecase::publisher::ResponseDto])
     )
 )]
-pub async fn get_publishers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.publisher_usecase.get_all_publishers().await {
+pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.publisher_usecase.get_all().await {
         Ok(publishers) => (StatusCode::OK, Json(publishers)).into_response(),
         Err(e) => map_error(e).into_response(),
     }
@@ -28,18 +26,15 @@ pub async fn get_publishers(State(state): State<Arc<AppState>>) -> impl IntoResp
     get,
     path = "/publishers/{id}",
     responses(
-        (status = 200, description = "Get publisher by id", body = PublisherResponseDto),
+        (status = 200, description = "Get publisher by id", body = usecase::publisher::ResponseDto),
         (status = 404, description = "Publisher not found")
     ),
     params(
         ("id" = i32, Path, description = "Publisher id")
     )
 )]
-pub async fn get_publisher(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i32>,
-) -> impl IntoResponse {
-    match state.publisher_usecase.get_publisher(id).await {
+pub async fn get(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
+    match state.publisher_usecase.get(id).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => map_error(e).into_response(),
     }
@@ -48,16 +43,16 @@ pub async fn get_publisher(
 #[utoipa::path(
     post,
     path = "/publishers",
-    request_body = PublisherCreateDto,
+    request_body =  usecase::publisher::CreateDto,
     responses(
-        (status = 201, description = "Publisher created successfully", body = PublisherResponseDto)
+        (status = 201, description = "Publisher created successfully", body = usecase::publisher::ResponseDto)
     )
 )]
-pub async fn create_publisher(
+pub async fn create(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<PublisherCreateDto>,
+    Json(payload): Json<usecase::publisher::CreateDto>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.create_publisher(payload).await {
+    match state.publisher_usecase.create(payload).await {
         Ok(publisher) => (StatusCode::CREATED, Json(publisher)).into_response(),
         Err(e) => map_error(e).into_response(),
     }
@@ -66,22 +61,22 @@ pub async fn create_publisher(
 #[utoipa::path(
     put,
     path = "/publishers/{id}",
-    request_body = PublisherUpdateDto,
+    request_body = usecase::publisher::UpdateDto,
     responses(
-        (status = 200, description = "Publisher updated successfully", body = PublisherResponseDto),
+        (status = 200, description = "Publisher updated successfully", body = usecase::publisher::ResponseDto),
         (status = 404, description = "Publisher not found")
     ),
     params(
         ("id" = i32, Path, description = "Publisher id")
     )
 )]
-pub async fn update_publisher(
+pub async fn update(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
-    Json(mut payload): Json<PublisherUpdateDto>,
+    Json(mut payload): Json<usecase::publisher::UpdateDto>,
 ) -> impl IntoResponse {
     payload.id = id;
-    match state.publisher_usecase.update_publisher(payload).await {
+    match state.publisher_usecase.update(payload).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => map_error(e).into_response(),
     }
@@ -98,11 +93,8 @@ pub async fn update_publisher(
         ("id" = i32, Path, description = "Publisher id")
     )
 )]
-pub async fn delete_publisher(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i32>,
-) -> impl IntoResponse {
-    match state.publisher_usecase.delete_publisher(id).await {
+pub async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
+    match state.publisher_usecase.delete(id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => map_error(e).into_response(),
     }

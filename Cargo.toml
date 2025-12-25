@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["domain", "infrastructure", "usecase", "api"]
+members = ["domain", "infra", "usecase", "api"]
 resolver = "2"
 
 [dependencies]
 domain = { workspace = true }
-infrastructure = { workspace = true }
+infra = { workspace = true }
 usecase = { workspace = true }
 api = { workspace = true }
 tokio = { workspace = true }
@@ -33,7 +33,7 @@ sea-orm = { version = "2.0.0-rc", features = [
 
 # Internal
 domain = { path = "domain" }
-infrastructure = { path = "infrastructure" }
+infra = { path = "infra" }
 usecase = { path = "usecase" }
 api = { path = "api" }
 
