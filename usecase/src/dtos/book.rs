@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BookCreateDto {
     pub title: String,
     pub author: String,
     pub publisher_id: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BookUpdateDto {
     pub id: i32,
     pub title: String,
@@ -15,7 +16,7 @@ pub struct BookUpdateDto {
     pub publisher_id: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BookResponseDto {
     pub id: i32,
     pub title: String,

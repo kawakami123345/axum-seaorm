@@ -8,3 +8,4 @@ domain = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
+utoipa = { workspace = true }

@@ -5,11 +5,18 @@ use axum::{
     response::IntoResponse,
 };
 use std::sync::Arc;
-use usecase::dtos::publisher::{PublisherCreateDto, PublisherUpdateDto};
+use usecase::dtos::publisher::{PublisherCreateDto, PublisherResponseDto, PublisherUpdateDto};
 use usecase::map_error;
 
 use crate::handlers::AppState;
 
+#[utoipa::path(
+    get,
+    path = "/publishers",
+    responses(
+        (status = 200, description = "List all publishers", body = [PublisherResponseDto])
+    )
+)]
 pub async fn get_publishers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.publisher_usecase.get_all_publishers().await {
         Ok(publishers) => (StatusCode::OK, Json(publishers)).into_response(),
@@ -17,6 +24,17 @@ pub async fn get_publishers(State(state): State<Arc<AppState>>) -> impl IntoResp
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/publishers/{id}",
+    responses(
+        (status = 200, description = "Get publisher by id", body = PublisherResponseDto),
+        (status = 404, description = "Publisher not found")
+    ),
+    params(
+        ("id" = i32, Path, description = "Publisher id")
+    )
+)]
 pub async fn get_publisher(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
@@ -27,6 +45,14 @@ pub async fn get_publisher(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/publishers",
+    request_body = PublisherCreateDto,
+    responses(
+        (status = 201, description = "Publisher created successfully", body = PublisherResponseDto)
+    )
+)]
 pub async fn create_publisher(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<PublisherCreateDto>,
@@ -37,6 +63,18 @@ pub async fn create_publisher(
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/publishers/{id}",
+    request_body = PublisherUpdateDto,
+    responses(
+        (status = 200, description = "Publisher updated successfully", body = PublisherResponseDto),
+        (status = 404, description = "Publisher not found")
+    ),
+    params(
+        ("id" = i32, Path, description = "Publisher id")
+    )
+)]
 pub async fn update_publisher(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
@@ -49,6 +87,17 @@ pub async fn update_publisher(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/publishers/{id}",
+    responses(
+        (status = 204, description = "Publisher deleted successfully"),
+        (status = 404, description = "Publisher not found")
+    ),
+    params(
+        ("id" = i32, Path, description = "Publisher id")
+    )
+)]
 pub async fn delete_publisher(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
