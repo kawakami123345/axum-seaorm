@@ -8,6 +8,14 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
+#[openapi(components(schemas(
+    usecase::book::CreateDto,
+    usecase::book::UpdateDto,
+    usecase::book::ResponseDto,
+    usecase::publisher::CreateDto,
+    usecase::publisher::UpdateDto,
+    usecase::publisher::ResponseDto,
+)))]
 pub struct ApiDoc;
 
 pub struct AppState {

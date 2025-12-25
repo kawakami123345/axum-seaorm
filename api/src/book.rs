@@ -11,6 +11,8 @@ use usecase::error::map_error;
 #[utoipa::path(
     get,
     path = "/books",
+    tag = "Book",
+    operation_id = "get_all_books",
     responses(
         (status = 200, description = "List all books", body = [usecase::book::ResponseDto])
     )
@@ -25,6 +27,8 @@ pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 #[utoipa::path(
     get,
     path = "/books/{id}",
+    tag = "Book",
+    operation_id = "get_book",
     responses(
         (status = 200, description = "Get book by id", body = usecase::book::ResponseDto),
         (status = 404, description = "Book not found")
@@ -43,6 +47,8 @@ pub async fn get(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> imp
 #[utoipa::path(
     post,
     path = "/books",
+    tag = "Book",
+    operation_id = "create_book",
     request_body = usecase::book::CreateDto,
     responses(
         (status = 201, description = "Book created successfully", body = usecase::book::ResponseDto)
@@ -61,6 +67,8 @@ pub async fn create(
 #[utoipa::path(
     put,
     path = "/books/{id}",
+    tag = "Book",
+    operation_id = "update_book",
     request_body = usecase::book::UpdateDto,
     responses(
         (status = 200, description = "Book updated successfully", body = usecase::book::ResponseDto),
@@ -85,6 +93,8 @@ pub async fn update(
 #[utoipa::path(
     delete,
     path = "/books/{id}",
+    tag = "Book",
+    operation_id = "delete_book",
     responses(
         (status = 204, description = "Book deleted successfully"),
         (status = 404, description = "Book not found")

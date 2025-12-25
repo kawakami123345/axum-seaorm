@@ -51,6 +51,7 @@ impl Service {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookCreateDto)]
 pub struct CreateDto {
     pub title: String,
     pub author: String,
@@ -58,6 +59,7 @@ pub struct CreateDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookUpdateDto)]
 pub struct UpdateDto {
     pub id: i32,
     pub title: String,
@@ -66,6 +68,7 @@ pub struct UpdateDto {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookResponseDto)]
 pub struct ResponseDto {
     pub id: i32,
     pub title: String,

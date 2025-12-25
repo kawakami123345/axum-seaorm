@@ -11,6 +11,8 @@ use usecase::error::map_error;
 #[utoipa::path(
     get,
     path = "/publishers",
+    tag = "Publisher",
+    operation_id = "get_all_publishers",
     responses(
         (status = 200, description = "List all publishers", body = [usecase::publisher::ResponseDto])
     )
@@ -25,6 +27,8 @@ pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 #[utoipa::path(
     get,
     path = "/publishers/{id}",
+    tag = "Publisher",
+    operation_id = "get_publisher",
     responses(
         (status = 200, description = "Get publisher by id", body = usecase::publisher::ResponseDto),
         (status = 404, description = "Publisher not found")
@@ -43,6 +47,8 @@ pub async fn get(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> imp
 #[utoipa::path(
     post,
     path = "/publishers",
+    tag = "Publisher",
+    operation_id = "create_publisher",
     request_body =  usecase::publisher::CreateDto,
     responses(
         (status = 201, description = "Publisher created successfully", body = usecase::publisher::ResponseDto)
@@ -61,6 +67,8 @@ pub async fn create(
 #[utoipa::path(
     put,
     path = "/publishers/{id}",
+    tag = "Publisher",
+    operation_id = "update_publisher",
     request_body = usecase::publisher::UpdateDto,
     responses(
         (status = 200, description = "Publisher updated successfully", body = usecase::publisher::ResponseDto),
@@ -85,6 +93,8 @@ pub async fn update(
 #[utoipa::path(
     delete,
     path = "/publishers/{id}",
+    tag = "Publisher",
+    operation_id = "delete_publisher",
     responses(
         (status = 204, description = "Publisher deleted successfully"),
         (status = 404, description = "Publisher not found")

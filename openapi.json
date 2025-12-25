@@ -11,7 +11,10 @@
   "paths": {
     "/books": {
       "get": {
-        "operationId": "get_books",
+        "tags": [
+          "Book"
+        ],
+        "operationId": "get_all_books",
         "responses": {
           "200": {
             "description": "List all books",
@@ -29,6 +32,9 @@
         }
       },
       "post": {
+        "tags": [
+          "Book"
+        ],
         "operationId": "create_book",
         "requestBody": {
           "content": {
@@ -56,6 +62,9 @@
     },
     "/books/{id}": {
       "get": {
+        "tags": [
+          "Book"
+        ],
         "operationId": "get_book",
         "parameters": [
           {
@@ -86,6 +95,9 @@
         }
       },
       "put": {
+        "tags": [
+          "Book"
+        ],
         "operationId": "update_book",
         "parameters": [
           {
@@ -126,6 +138,9 @@
         }
       },
       "delete": {
+        "tags": [
+          "Book"
+        ],
         "operationId": "delete_book",
         "parameters": [
           {
@@ -151,7 +166,10 @@
     },
     "/publishers": {
       "get": {
-        "operationId": "get_publishers",
+        "tags": [
+          "Publisher"
+        ],
+        "operationId": "get_all_publishers",
         "responses": {
           "200": {
             "description": "List all publishers",
@@ -169,6 +187,9 @@
         }
       },
       "post": {
+        "tags": [
+          "Publisher"
+        ],
         "operationId": "create_publisher",
         "requestBody": {
           "content": {
@@ -196,6 +217,9 @@
     },
     "/publishers/{id}": {
       "get": {
+        "tags": [
+          "Publisher"
+        ],
         "operationId": "get_publisher",
         "parameters": [
           {
@@ -226,6 +250,9 @@
         }
       },
       "put": {
+        "tags": [
+          "Publisher"
+        ],
         "operationId": "update_publisher",
         "parameters": [
           {
@@ -266,6 +293,9 @@
         }
       },
       "delete": {
+        "tags": [
+          "Publisher"
+        ],
         "operationId": "delete_publisher",
         "parameters": [
           {
