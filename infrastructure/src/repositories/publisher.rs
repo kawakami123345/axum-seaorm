@@ -1,6 +1,6 @@
 use crate::entities::publisher;
 use async_trait::async_trait;
-use domain::{Publisher, PublisherRepository, models::DomainError};
+use domain::{Publisher, interfaces::PublisherRepository, models::DomainError};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct PublisherRepositoryImpl {
@@ -22,8 +22,10 @@ impl From<publisher::Model> for Publisher {
     }
 }
 
+use domain::interfaces::RepositoryBase;
+
 #[async_trait]
-impl PublisherRepository for PublisherRepositoryImpl {
+impl RepositoryBase<Publisher> for PublisherRepositoryImpl {
     async fn find_all(&self) -> Result<Vec<Publisher>, DomainError> {
         let publishers = publisher::Entity::find()
             .all(&self.db)
@@ -43,9 +45,9 @@ impl PublisherRepository for PublisherRepositoryImpl {
         Ok(Publisher::from(publisher))
     }
 
-    async fn create(&self, data: Publisher) -> Result<Publisher, DomainError> {
+    async fn create(&self, item: Publisher) -> Result<Publisher, DomainError> {
         let active_model = publisher::ActiveModel {
-            name: Set(data.name),
+            name: Set(item.name),
             ..Default::default() // id is ignored/auto-incremented
         };
 
@@ -57,10 +59,10 @@ impl PublisherRepository for PublisherRepositoryImpl {
         Ok(Publisher::from(result))
     }
 
-    async fn update(&self, data: Publisher) -> Result<Publisher, DomainError> {
+    async fn update(&self, item: Publisher) -> Result<Publisher, DomainError> {
         let active_model = publisher::ActiveModel {
-            id: Set(data.id),
-            name: Set(data.name),
+            id: Set(item.id),
+            name: Set(item.name),
         };
 
         let result = active_model
@@ -84,3 +86,6 @@ impl PublisherRepository for PublisherRepositoryImpl {
         Ok(())
     }
 }
+
+#[async_trait]
+impl PublisherRepository for PublisherRepositoryImpl {}

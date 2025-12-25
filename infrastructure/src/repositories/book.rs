@@ -1,6 +1,6 @@
 use crate::entities::book;
 use async_trait::async_trait;
-use domain::{Book, BookRepository, models::DomainError};
+use domain::{Book, interfaces::BookRepository, models::DomainError};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct BookRepositoryImpl {
@@ -24,8 +24,10 @@ impl From<book::Model> for Book {
     }
 }
 
+use domain::interfaces::RepositoryBase;
+
 #[async_trait]
-impl BookRepository for BookRepositoryImpl {
+impl RepositoryBase<Book> for BookRepositoryImpl {
     async fn find_all(&self) -> Result<Vec<Book>, DomainError> {
         let books = book::Entity::find()
             .all(&self.db)
@@ -45,11 +47,11 @@ impl BookRepository for BookRepositoryImpl {
         Ok(Book::from(book))
     }
 
-    async fn create(&self, data: Book) -> Result<Book, DomainError> {
+    async fn create(&self, item: Book) -> Result<Book, DomainError> {
         let active_model = book::ActiveModel {
-            title: Set(data.title),
-            author: Set(data.author),
-            publisher_id: Set(data.publisher_id),
+            title: Set(item.title),
+            author: Set(item.author),
+            publisher_id: Set(item.publisher_id),
             ..Default::default() // id is ignored/auto-incremented
         };
 
@@ -61,12 +63,12 @@ impl BookRepository for BookRepositoryImpl {
         Ok(Book::from(result))
     }
 
-    async fn update(&self, data: Book) -> Result<Book, DomainError> {
+    async fn update(&self, item: Book) -> Result<Book, DomainError> {
         let active_model = book::ActiveModel {
-            id: Set(data.id),
-            title: Set(data.title),
-            author: Set(data.author),
-            publisher_id: Set(data.publisher_id),
+            id: Set(item.id),
+            title: Set(item.title),
+            author: Set(item.author),
+            publisher_id: Set(item.publisher_id),
         };
 
         let result = active_model
@@ -96,3 +98,6 @@ impl BookRepository for BookRepositoryImpl {
         Ok(())
     }
 }
+
+#[async_trait]
+impl BookRepository for BookRepositoryImpl {}

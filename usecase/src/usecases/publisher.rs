@@ -1,6 +1,6 @@
 use crate::UseCaseError;
 use crate::dtos::publisher::{PublisherCreateDto, PublisherResponseDto, PublisherUpdateDto};
-use domain::{Publisher, PublisherRepository};
+use domain::{Publisher, interfaces::PublisherRepository};
 use std::sync::Arc;
 
 pub struct PublisherUseCase {

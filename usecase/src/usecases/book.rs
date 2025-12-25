@@ -1,6 +1,6 @@
 use crate::UseCaseError;
 use crate::dtos::book::{BookCreateDto, BookResponseDto, BookUpdateDto};
-use domain::{Book, BookRepository};
+use domain::{Book, interfaces::BookRepository};
 use std::sync::Arc;
 
 pub struct BookUseCase {

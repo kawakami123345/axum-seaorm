@@ -3,11 +3,16 @@ pub mod repositories;
 
 // Re-export implementations if needed, or allow access via repositories::
 
+#[cfg(debug_assertions)]
 use domain::models::DomainError;
-use entities::{book, publisher};
-use sea_orm::{ConnectionTrait, DatabaseConnection, Schema};
+#[cfg(debug_assertions)]
+use sea_orm::DatabaseConnection;
 
+#[cfg(debug_assertions)]
 pub async fn init_db(db: &DatabaseConnection) -> Result<(), DomainError> {
+    use entities::{book, publisher};
+    use sea_orm::{ConnectionTrait, Schema};
+
     let builder = db.get_database_backend();
     let schema = Schema::new(builder);
 
@@ -24,6 +29,6 @@ pub async fn init_db(db: &DatabaseConnection) -> Result<(), DomainError> {
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
     }
-
+    println!("Database schema initialized.");
     Ok(())
 }

@@ -1,9 +1,14 @@
 use async_trait::async_trait;
-use domain::{Book, BookRepository, Publisher, PublisherRepository, models::DomainError};
+use domain::{
+    Book, Publisher, interfaces::BookRepository, interfaces::PublisherRepository,
+    models::DomainError,
+};
+
+use domain::interfaces::RepositoryBase;
 
 pub struct MockBookRepository;
 #[async_trait]
-impl BookRepository for MockBookRepository {
+impl RepositoryBase<Book> for MockBookRepository {
     async fn find_all(&self) -> Result<Vec<Book>, DomainError> {
         Ok(vec![])
     }
@@ -21,9 +26,12 @@ impl BookRepository for MockBookRepository {
     }
 }
 
+#[async_trait]
+impl BookRepository for MockBookRepository {}
+
 pub struct MockPublisherRepository;
 #[async_trait]
-impl PublisherRepository for MockPublisherRepository {
+impl RepositoryBase<Publisher> for MockPublisherRepository {
     async fn find_all(&self) -> Result<Vec<Publisher>, DomainError> {
         Ok(vec![])
     }
@@ -40,3 +48,6 @@ impl PublisherRepository for MockPublisherRepository {
         Ok(())
     }
 }
+
+#[async_trait]
+impl PublisherRepository for MockPublisherRepository {}

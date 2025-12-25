@@ -14,14 +14,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::connect(db_url).await?;
 
     // 2. Setup Schema (Automated via infrastructure)
+    #[cfg(debug_assertions)]
     infrastructure::init_db(&db).await?;
-    println!("Database initialized.");
 
     // 3. Dependency Injection
-    let book_repo =
-        Arc::new(BookRepositoryImpl::new(db.clone())) as Arc<dyn domain::BookRepository>;
-    let publisher_repo =
-        Arc::new(PublisherRepositoryImpl::new(db.clone())) as Arc<dyn domain::PublisherRepository>;
+    let book_repo = Arc::new(BookRepositoryImpl::new(db.clone()))
+        as Arc<dyn domain::interfaces::BookRepository>;
+    let publisher_repo = Arc::new(PublisherRepositoryImpl::new(db.clone()))
+        as Arc<dyn domain::interfaces::PublisherRepository>;
 
     let book_usecase = BookUseCase::new(book_repo);
     let publisher_usecase = PublisherUseCase::new(publisher_repo);
