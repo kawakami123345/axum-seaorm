@@ -6,7 +6,6 @@ use axum::{
     response::IntoResponse,
 };
 use std::sync::Arc;
-use usecase::error::map_error;
 
 #[utoipa::path(
     get,
@@ -20,7 +19,7 @@ use usecase::error::map_error;
 pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.publisher_usecase.get_all().await {
         Ok(publishers) => (StatusCode::OK, Json(publishers)).into_response(),
-        Err(e) => map_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -40,7 +39,7 @@ pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 pub async fn get(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
     match state.publisher_usecase.get(id).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
-        Err(e) => map_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -60,7 +59,7 @@ pub async fn create(
 ) -> impl IntoResponse {
     match state.publisher_usecase.create(payload).await {
         Ok(publisher) => (StatusCode::CREATED, Json(publisher)).into_response(),
-        Err(e) => map_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -86,7 +85,7 @@ pub async fn update(
     payload.id = id;
     match state.publisher_usecase.update(payload).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
-        Err(e) => map_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -106,6 +105,6 @@ pub async fn update(
 pub async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
     match state.publisher_usecase.delete(id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => map_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }

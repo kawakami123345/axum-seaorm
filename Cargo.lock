@@ -50,6 +50,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+
+[[package]]
 name = "api"
 version = "0.1.0"
 dependencies = [
@@ -239,6 +245,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "book"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -526,15 +542,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.111",
-]
-
-[[package]]
-name = "domain"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "thiserror",
 ]
 
 [[package]]
@@ -1038,8 +1045,10 @@ dependencies = [
 name = "infra"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
- "domain",
+ "book",
+ "publisher",
  "sea-orm",
  "serde",
  "tokio",
@@ -1568,6 +1577,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "publisher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1769,11 +1788,13 @@ dependencies = [
 name = "rust-web-app"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "api",
  "axum",
- "domain",
+ "book",
  "dotenvy",
  "infra",
+ "publisher",
  "sea-orm",
  "tokio",
  "usecase",
@@ -2757,10 +2778,13 @@ dependencies = [
 name = "usecase"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "axum",
- "domain",
+ "book",
+ "publisher",
  "serde",
+ "thiserror",
  "utoipa",
 ]
 

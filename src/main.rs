@@ -3,7 +3,7 @@ use sea_orm::Database;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     // 0. Load .env
     dotenvy::dotenv().ok();
 
@@ -16,10 +16,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     infra::init_db(&db).await?;
 
     // 3. Dependency Injection
-    let book_repo = Arc::new(infra::book::PostgresRepository::new(db.clone()))
-        as Arc<dyn domain::book::Repository>;
+    let book_repo =
+        Arc::new(infra::book::PostgresRepository::new(db.clone())) as Arc<dyn book::Repository>;
     let publisher_repo = Arc::new(infra::publisher::PostgresRepository::new(db.clone()))
-        as Arc<dyn domain::publisher::Repository>;
+        as Arc<dyn publisher::Repository>;
 
     let book_usecase = usecase::book::Service::new(book_repo);
     let publisher_usecase = usecase::publisher::Service::new(publisher_repo);

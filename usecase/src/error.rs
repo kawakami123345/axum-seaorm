@@ -1,24 +1,31 @@
-use axum::http::StatusCode;
-use domain::DomainError;
+use axum::{http::StatusCode, response::IntoResponse};
+use thiserror::Error;
 
-#[derive(Debug)]
-pub enum UseCaseError {
-    NotFound,
-    Internal(String),
+#[derive(Error, Debug)]
+pub enum ApiError {
+    #[error("Entity not found")]
+    NotFound(String),
+    #[error("Internal server error")]
+    InternalServerError,
+    #[error("Database execution failed")]
+    DatabaseError,
+    #[error("Domain error occurred: {0}")]
+    BookDomainError(#[from] book::DomainError),
+    #[error("Domain error occurred: {0}")]
+    PublisherDomainError(#[from] publisher::DomainError),
 }
 
-impl From<DomainError> for UseCaseError {
-    fn from(err: DomainError) -> Self {
-        match err {
-            DomainError::NotFound => Self::NotFound,
-            DomainError::InfraError(e) => Self::Internal(e),
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::InternalServerError | ApiError::DatabaseError => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ApiError::BookDomainError(_) | ApiError::PublisherDomainError(_) => {
+                StatusCode::BAD_REQUEST
+            }
         }
-    }
-}
-
-pub fn map_error(err: UseCaseError) -> (StatusCode, String) {
-    match err {
-        UseCaseError::NotFound => (StatusCode::NOT_FOUND, "Not Found".to_string()),
-        UseCaseError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
+        .into_response()
     }
 }

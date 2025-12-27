@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
-use crate::error::UseCaseError;
-use domain::publisher;
+use crate::error::ApiError;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 pub struct Service {
@@ -14,17 +12,26 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let publishers = self.repo.find_all().await.map_err(UseCaseError::from)?;
+    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, ApiError> {
+        let publishers = self
+            .repo
+            .find_all()
+            .await
+            .map_err(|_| ApiError::DatabaseError)?;
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(&self, id: i32) -> Result<ResponseDto, UseCaseError> {
-        let publisher = self.repo.find_by_id(id).await.map_err(UseCaseError::from)?;
+    pub async fn get(&self, id: i32) -> Result<ResponseDto, ApiError> {
+        let publisher = self
+            .repo
+            .find_by_id(id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!("Publisher Id = {}", id)))?;
         Ok(ResponseDto::from(publisher))
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
         let publisher = publisher::Publisher {
             id: 0,
             name: dto.name,
@@ -33,11 +40,11 @@ impl Service {
             .repo
             .create(publisher)
             .await
-            .map_err(UseCaseError::from)?;
+            .map_err(|_| ApiError::DatabaseError)?;
         Ok(ResponseDto::from(result))
     }
 
-    pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, UseCaseError> {
+    pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, ApiError> {
         let publisher = publisher::Publisher {
             id: dto.id,
             name: dto.name,
@@ -46,12 +53,16 @@ impl Service {
             .repo
             .update(publisher)
             .await
-            .map_err(UseCaseError::from)?;
+            .map_err(|_| ApiError::DatabaseError)?;
         Ok(ResponseDto::from(result))
     }
 
-    pub async fn delete(&self, id: i32) -> Result<(), UseCaseError> {
-        self.repo.delete(id).await.map_err(UseCaseError::from)
+    pub async fn delete(&self, id: i32) -> Result<(), ApiError> {
+        self.repo
+            .delete(id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?;
+        Ok(())
     }
 }
 

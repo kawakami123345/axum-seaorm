@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use domain::{DomainError, RepositoryBase};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
@@ -35,9 +34,9 @@ impl PostgresRepository {
     }
 }
 
-impl From<Model> for domain::publisher::Publisher {
+impl From<Model> for publisher::Publisher {
     fn from(model: Model) -> Self {
-        domain::publisher::Publisher {
+        publisher::Publisher {
             id: model.id,
             name: model.name,
         }
@@ -45,76 +44,42 @@ impl From<Model> for domain::publisher::Publisher {
 }
 
 #[async_trait]
-impl RepositoryBase<domain::publisher::Publisher> for PostgresRepository {
-    async fn find_all(&self) -> Result<Vec<domain::publisher::Publisher>, DomainError> {
-        let publishers = Entity::find()
-            .all(&self.db)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?;
-
+impl publisher::Repository for PostgresRepository {
+    async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
+        let publishers = Entity::find().all(&self.db).await?;
         Ok(publishers
             .into_iter()
-            .map(domain::publisher::Publisher::from)
+            .map(publisher::Publisher::from)
             .collect())
     }
 
-    async fn find_by_id(&self, id: i32) -> Result<domain::publisher::Publisher, DomainError> {
-        let publisher = Entity::find_by_id(id)
-            .one(&self.db)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?
-            .ok_or(DomainError::NotFound)?;
-
-        Ok(domain::publisher::Publisher::from(publisher))
+    async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<publisher::Publisher>> {
+        let publisher = Entity::find_by_id(id).one(&self.db).await?;
+        Ok(publisher.map(publisher::Publisher::from))
     }
 
-    async fn create(
-        &self,
-        item: domain::publisher::Publisher,
-    ) -> Result<domain::publisher::Publisher, DomainError> {
+    async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
             name: Set(item.name),
             ..Default::default() // id is ignored/auto-incremented
         };
 
-        let result = active_model
-            .insert(&self.db)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?;
-
-        Ok(domain::publisher::Publisher::from(result))
+        let result = active_model.insert(&self.db).await?;
+        Ok(publisher::Publisher::from(result))
     }
 
-    async fn update(
-        &self,
-        item: domain::publisher::Publisher,
-    ) -> Result<domain::publisher::Publisher, DomainError> {
+    async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
             id: Set(item.id),
             name: Set(item.name),
         };
 
-        let result = active_model
-            .update(&self.db)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?;
-
-        Ok(domain::publisher::Publisher::from(result))
+        let result = active_model.update(&self.db).await?;
+        Ok(publisher::Publisher::from(result))
     }
 
-    async fn delete(&self, id: i32) -> Result<(), DomainError> {
-        let result = Entity::delete_by_id(id)
-            .exec(&self.db)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?;
-
-        if result.rows_affected == 0 {
-            return Err(DomainError::NotFound);
-        }
-
+    async fn delete(&self, id: i32) -> anyhow::Result<()> {
+        let _ = Entity::delete_by_id(id).exec(&self.db).await?;
         Ok(())
     }
 }
-
-#[async_trait]
-impl domain::publisher::Repository for PostgresRepository {}

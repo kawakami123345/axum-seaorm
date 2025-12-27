@@ -1,15 +1,12 @@
 pub mod book;
 pub mod publisher;
-
 // Re-export implementations if needed, or allow access via repositories::
 
 #[cfg(debug_assertions)]
-use domain::DomainError;
-#[cfg(debug_assertions)]
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, DbErr};
 
 #[cfg(debug_assertions)]
-pub async fn init_db(db: &DatabaseConnection) -> Result<(), DomainError> {
+pub async fn init_db(db: &DatabaseConnection) -> Result<(), DbErr> {
     use sea_orm::{ConnectionTrait, Schema};
 
     let builder = db.get_database_backend();
@@ -24,9 +21,7 @@ pub async fn init_db(db: &DatabaseConnection) -> Result<(), DomainError> {
     let statements = vec![stmt1, stmt2];
 
     for stmt in statements {
-        db.execute(&stmt)
-            .await
-            .map_err(|e| DomainError::InfraError(e.to_string()))?;
+        db.execute(&stmt).await?;
     }
     println!("Database schema initialized.");
     Ok(())
