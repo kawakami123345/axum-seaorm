@@ -92,3 +92,69 @@ impl book::Repository for PostgresRepository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod test {
+    use async_trait::async_trait;
+    use tokio::sync::Mutex;
+
+    #[derive(Debug)]
+    pub struct MockRepository {
+        books: Mutex<Vec<book::Book>>,
+    }
+
+    impl MockRepository {
+        pub fn new(initial: Vec<book::Book>) -> Self {
+            Self {
+                books: Mutex::new(initial),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl book::Repository for MockRepository {
+        async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
+            Ok(self.books.lock().await.clone())
+        }
+
+        async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<book::Book>> {
+            Ok(self
+                .books
+                .lock()
+                .await
+                .iter()
+                .find(|&b| b.id == id)
+                .cloned())
+        }
+
+        async fn create(&self, mut item: book::Book) -> anyhow::Result<book::Book> {
+            let mut v = self.books.lock().await;
+            let next_id = v.iter().map(|b| b.id).max().unwrap_or(0) + 1;
+            item.id = next_id;
+            v.push(item.clone());
+            Ok(item)
+        }
+
+        async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
+            let mut v = self.books.lock().await;
+            if let Some(pos) = v.iter().position(|b| b.id == item.id) {
+                v[pos] = item.clone();
+                Ok(item)
+            } else {
+                Err(anyhow::anyhow!("not found"))
+            }
+        }
+
+        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+            let mut v = self.books.lock().await;
+            let original = v.len();
+            v.retain(|b| b.id != id);
+            if v.len() == original {
+                Err(anyhow::anyhow!("not found"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}

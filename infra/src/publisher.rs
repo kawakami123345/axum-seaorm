@@ -83,3 +83,72 @@ impl publisher::Repository for PostgresRepository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod test {
+    use async_trait::async_trait;
+    use tokio::sync::Mutex;
+
+    #[derive(Debug)]
+    pub struct MockRepository {
+        publishers: Mutex<Vec<publisher::Publisher>>,
+    }
+
+    impl MockRepository {
+        pub fn new(initial: Vec<publisher::Publisher>) -> Self {
+            Self {
+                publishers: Mutex::new(initial),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl publisher::Repository for MockRepository {
+        async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
+            Ok(self.publishers.lock().await.clone())
+        }
+
+        async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<publisher::Publisher>> {
+            Ok(self
+                .publishers
+                .lock()
+                .await
+                .iter()
+                .find(|&b| b.id == id)
+                .cloned())
+        }
+
+        async fn create(
+            &self,
+            mut item: publisher::Publisher,
+        ) -> anyhow::Result<publisher::Publisher> {
+            let mut v = self.publishers.lock().await;
+            let next_id = v.iter().map(|b| b.id).max().unwrap_or(0) + 1;
+            item.id = next_id;
+            v.push(item.clone());
+            Ok(item)
+        }
+
+        async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+            let mut v = self.publishers.lock().await;
+            if let Some(pos) = v.iter().position(|b| b.id == item.id) {
+                v[pos] = item.clone();
+                Ok(item)
+            } else {
+                Err(anyhow::anyhow!("not found"))
+            }
+        }
+
+        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+            let mut v = self.publishers.lock().await;
+            let original = v.len();
+            v.retain(|b| b.id != id);
+            if v.len() == original {
+                Err(anyhow::anyhow!("not found"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
