@@ -1,7 +1,7 @@
 use api::{AppState, create_router};
 use sea_orm::Database;
 use std::sync::Arc;
-
+mod test;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 0. Load .env

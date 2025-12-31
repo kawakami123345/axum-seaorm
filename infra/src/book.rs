@@ -93,18 +93,18 @@ impl book::Repository for PostgresRepository {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 #[allow(dead_code)]
-mod test {
+pub mod fake {
     use async_trait::async_trait;
     use tokio::sync::Mutex;
 
     #[derive(Debug)]
-    pub struct MockRepository {
+    pub struct FakeRepository {
         books: Mutex<Vec<book::Book>>,
     }
 
-    impl MockRepository {
+    impl FakeRepository {
         pub fn new(initial: Vec<book::Book>) -> Self {
             Self {
                 books: Mutex::new(initial),
@@ -113,7 +113,7 @@ mod test {
     }
 
     #[async_trait]
-    impl book::Repository for MockRepository {
+    impl book::Repository for FakeRepository {
         async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
             Ok(self.books.lock().await.clone())
         }

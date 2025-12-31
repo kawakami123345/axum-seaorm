@@ -10,7 +10,7 @@ resolver = "2"
 [dependencies]
 book = { workspace = true }
 publisher = { workspace = true }
-infra = { workspace = true }
+infra = { workspace = true, features = ["test"] }
 usecase = { workspace = true }
 api = { workspace = true }
 tokio = { workspace = true }
