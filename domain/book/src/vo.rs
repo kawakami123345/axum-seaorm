@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::DomainError;
 
@@ -8,9 +9,9 @@ pub struct BookTitle(String);
 
 impl BookTitle {
     pub fn new(title: String) -> Result<Self, DomainError> {
-        if title.chars().count() > 128 {
+        if title.chars().count() > 32 {
             return Err(DomainError::InvalidFormat(
-                "Title must be 128 chars or less".to_string(),
+                "Title must be 32 chars or less".to_string(),
             ));
         }
         Ok(Self(title))
@@ -40,18 +41,25 @@ impl BookAuthor {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub enum BookStatus {
-    Unapplied,
-    Applied,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BookFormat {
+    #[default]
+    Real,
+    EBook,
 }
 
-impl BookStatus {
-    pub fn value(&self) -> &str {
+impl BookFormat {
+    pub fn as_str(&self) -> &str {
         match self {
-            BookStatus::Unapplied => "Unapplied",
-            BookStatus::Applied => "Applied",
+            BookFormat::Real => "Real",
+            BookFormat::EBook => "EBook",
         }
+    }
+}
+
+impl fmt::Display for BookFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

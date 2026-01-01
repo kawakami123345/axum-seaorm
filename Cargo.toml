@@ -4,12 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["domain/book", "domain/publisher", "infra", "usecase", "api"]
+members = [
+    "domain/book",
+    "domain/publisher",
+    "infra",
+    "usecase",
+    "api",
+    "domain/shop",
+]
 resolver = "2"
 
 [dependencies]
 book = { workspace = true }
 publisher = { workspace = true }
+shop = { workspace = true }
 infra = { workspace = true }
 usecase = { workspace = true }
 api = { workspace = true }
@@ -45,6 +53,7 @@ sea-orm = { version = "2.0.0-rc", features = [
 # Internal
 book = { path = "domain/book" }
 publisher = { path = "domain/publisher" }
+shop = { path = "domain/shop" }
 infra = { path = "infra" }
 usecase = { path = "usecase" }
 api = { path = "api" }

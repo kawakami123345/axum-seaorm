@@ -17,6 +17,7 @@ impl IntoResponse for AppError {
             UseCaseError::DomainRuleViolation(msg) => (StatusCode::BAD_REQUEST, msg),
             UseCaseError::BookDomainError(e) => (StatusCode::BAD_REQUEST, e.to_string()),
             UseCaseError::PublisherDomainError(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            UseCaseError::ShopDomainError(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };
 
         let body = Json(json!({

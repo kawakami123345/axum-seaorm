@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 book = { workspace = true }
 publisher = { workspace = true }
+shop = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
 

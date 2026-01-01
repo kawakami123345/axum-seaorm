@@ -445,6 +445,7 @@ dependencies = [
  "chrono",
  "publisher",
  "serde",
+ "shop",
  "thiserror",
  "uuid",
 ]
@@ -1394,13 +1395,16 @@ name = "infra"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "api",
  "async-trait",
  "book",
  "chrono",
  "publisher",
  "sea-orm",
  "serde",
+ "shop",
  "tokio",
+ "usecase",
  "uuid",
 ]
 
@@ -2274,6 +2278,7 @@ dependencies = [
  "publisher",
  "rstest",
  "sea-orm",
+ "shop",
  "tokio",
  "tracing-subscriber",
  "usecase",
@@ -2662,6 +2667,18 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "shop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "serde",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "signal-hook-registry"
@@ -3368,6 +3385,7 @@ dependencies = [
  "publisher",
  "rstest",
  "serde",
+ "shop",
  "thiserror",
  "tokio",
  "utoipa",

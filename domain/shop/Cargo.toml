@@ -1,5 +1,5 @@
 [package]
-name = "book"
+name = "shop"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,8 +9,4 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 uuid = { workspace = true }
-publisher = { workspace = true }
-shop = { workspace = true }
-
-
 chrono = { workspace = true }

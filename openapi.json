@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "api",
+    "title": "Rust Web App",
     "description": "",
     "license": {
       "name": ""
@@ -164,12 +164,12 @@
         }
       }
     },
-    "/books/{pub_id}/switch_status": {
+    "/books/{pub_id}/applied_at": {
       "put": {
         "tags": [
           "Book"
         ],
-        "operationId": "switch_book_status",
+        "operationId": "change_book_applied_at",
         "parameters": [
           {
             "name": "pub_id",
@@ -182,9 +182,19 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookChangeAppliedAtDto"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
-            "description": "Book status switched successfully",
+            "description": "Book applied_at changed successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -353,10 +363,192 @@
           }
         }
       }
+    },
+    "/shops": {
+      "get": {
+        "tags": [
+          "Shop"
+        ],
+        "operationId": "get_all_shops",
+        "responses": {
+          "200": {
+            "description": "List of all shops",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShopResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Shop"
+        ],
+        "operationId": "create_shop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Shop created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopResponseDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/shops/{pub_id}": {
+      "get": {
+        "tags": [
+          "Shop"
+        ],
+        "operationId": "get_shop",
+        "parameters": [
+          {
+            "name": "pub_id",
+            "in": "path",
+            "description": "Shop ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shop found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shop not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Shop"
+        ],
+        "operationId": "update_shop",
+        "parameters": [
+          {
+            "name": "pub_id",
+            "in": "path",
+            "description": "Shop ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Shop updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shop not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Shop"
+        ],
+        "operationId": "delete_shop",
+        "parameters": [
+          {
+            "name": "pub_id",
+            "in": "path",
+            "description": "Shop ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Shop deleted successfully"
+          },
+          "404": {
+            "description": "Shop not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "BookChangeAppliedAtDto": {
+        "type": "object",
+        "properties": {
+          "applied_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2024-01-01T00:00:00Z"
+          }
+        }
+      },
       "BookCreateDto": {
         "type": "object",
         "required": [
@@ -369,12 +561,26 @@
           "author": {
             "type": "string"
           },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Real"
+          },
           "price": {
             "type": "integer",
             "format": "int32"
           },
           "publisher_id": {
             "type": "string",
+            "format": "uuid"
+          },
+          "shop_id": {
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "title": {
@@ -405,12 +611,23 @@
           "title",
           "author",
           "publisher",
-          "status",
+          "format",
           "price"
         ],
         "properties": {
+          "applied_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2024-01-01T00:00:00Z"
+          },
           "author": {
             "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "example": "Real"
           },
           "price": {
             "type": "integer",
@@ -423,12 +640,34 @@
           "publisher": {
             "$ref": "#/components/schemas/BookPublisherDto"
           },
-          "status": {
-            "type": "string",
-            "example": "Unapplied"
+          "shop": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookShopDto"
+              }
+            ]
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "BookShopDto": {
+        "type": "object",
+        "required": [
+          "pub_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -444,12 +683,26 @@
           "author": {
             "type": "string"
           },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "Real"
+          },
           "price": {
             "type": "integer",
             "format": "int32"
           },
           "publisher_id": {
             "type": "string",
+            "format": "uuid"
+          },
+          "shop_id": {
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "title": {
@@ -485,6 +738,44 @@
         }
       },
       "PublisherUpdateDto": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ShopCreateDto": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ShopResponseDto": {
+        "type": "object",
+        "required": [
+          "pub_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ShopUpdateDto": {
         "type": "object",
         "required": [
           "name"

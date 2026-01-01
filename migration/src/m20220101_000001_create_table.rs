@@ -8,7 +8,9 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let schema = Schema::new(manager.get_database_backend());
-
+        manager
+            .create_table(schema.create_table_from_entity(infra::shop::Entity))
+            .await?;
         manager
             .create_table(schema.create_table_from_entity(infra::publisher::Entity))
             .await?;
@@ -20,10 +22,13 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
+            .drop_table(Table::drop().table(infra::book::Entity).to_owned())
+            .await?;
+        manager
             .drop_table(Table::drop().table(infra::publisher::Entity).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(infra::book::Entity).to_owned())
+            .drop_table(Table::drop().table(infra::shop::Entity).to_owned())
             .await?;
         Ok(())
     }

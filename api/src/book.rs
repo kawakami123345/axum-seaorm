@@ -117,22 +117,24 @@ pub async fn delete(
 
 #[utoipa::path(
     put,
-    path = "/books/{pub_id}/switch_status",
+    path = "/books/{pub_id}/applied_at",
     tag = "Book",
-    operation_id = "switch_book_status",
+    operation_id = "change_book_applied_at",
+    request_body = usecase::book::ChangeAppliedAtDto,
     responses(
-        (status = 200, description = "Book status switched successfully", body = usecase::book::ResponseDto),
+        (status = 200, description = "Book applied_at changed successfully", body = usecase::book::ResponseDto),
         (status = 404, description = "Book not found")
     ),
     params(
         ("pub_id" = uuid::Uuid, Path, description = "Book pub_id")
     )
 )]
-pub async fn switch_status(
+pub async fn change_applied_at(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
+    Json(payload): Json<usecase::book::ChangeAppliedAtDto>,
 ) -> impl IntoResponse {
-    match state.book_usecase.switch_status(pub_id).await {
+    match state.book_usecase.change_applied_at(pub_id, payload).await {
         Ok(book) => (StatusCode::OK, Json(book)).into_response(),
         Err(e) => AppError(e).into_response(),
     }

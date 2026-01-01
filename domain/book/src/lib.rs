@@ -20,7 +20,9 @@ pub struct Book {
     title: vo::BookTitle,
     author: vo::BookAuthor,
     publisher: publisher::Publisher,
-    status: vo::BookStatus,
+    shop: Option<shop::Shop>,
+    applied_at: Option<chrono::DateTime<chrono::Utc>>,
+    format: vo::BookFormat,
     price: vo::BookPrice,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -29,11 +31,14 @@ pub struct Book {
 }
 
 impl Book {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         pub_id: uuid::Uuid,
         title: vo::BookTitle,
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
+        shop: Option<shop::Shop>,
+        format: vo::BookFormat,
         price: vo::BookPrice,
         created_by: String,
     ) -> Self {
@@ -44,7 +49,9 @@ impl Book {
             title,
             author,
             publisher,
-            status: vo::BookStatus::Unapplied,
+            shop,
+            applied_at: None,
+            format,
             price,
             created_at: now,
             updated_at: now,
@@ -60,7 +67,9 @@ impl Book {
         title: vo::BookTitle,
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
-        status: vo::BookStatus,
+        shop: Option<shop::Shop>,
+        applied_at: Option<chrono::DateTime<chrono::Utc>>,
+        format: vo::BookFormat,
         price: vo::BookPrice,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
@@ -73,7 +82,9 @@ impl Book {
             title,
             author,
             publisher,
-            status,
+            shop,
+            applied_at,
+            format,
             price,
             created_at,
             updated_at,
@@ -97,8 +108,14 @@ impl Book {
     pub fn publisher(&self) -> publisher::Publisher {
         self.publisher.clone()
     }
-    pub fn status(&self) -> String {
-        self.status.value().to_string()
+    pub fn shop(&self) -> Option<shop::Shop> {
+        self.shop.clone()
+    }
+    pub fn applied_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.applied_at
+    }
+    pub fn format(&self) -> vo::BookFormat {
+        self.format
     }
     pub fn price(&self) -> i32 {
         self.price.value()
@@ -121,15 +138,18 @@ impl Book {
         self.updated_by = updated_by;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         title: vo::BookTitle,
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
+        shop: Option<shop::Shop>,
+        format: vo::BookFormat,
         price: vo::BookPrice,
         updated_by: String,
     ) -> Result<(), DomainError> {
-        if self.status == vo::BookStatus::Applied {
+        if self.applied_at.is_some() {
             return Err(DomainError::DomainRuleViolation(
                 "Cannot update a book that is already applied.".to_string(),
             ));
@@ -138,16 +158,19 @@ impl Book {
         self.title = title;
         self.author = author;
         self.publisher = publisher;
+        self.shop = shop;
+        self.format = format;
         self.price = price;
         self.update_audit(updated_by);
         Ok(())
     }
 
-    pub fn switch_status(&mut self, updated_by: String) -> Result<(), DomainError> {
-        match self.status {
-            vo::BookStatus::Unapplied => self.status = vo::BookStatus::Applied,
-            vo::BookStatus::Applied => self.status = vo::BookStatus::Unapplied,
-        }
+    pub fn change_applied_at(
+        &mut self,
+        applied_at: Option<chrono::DateTime<chrono::Utc>>,
+        updated_by: String,
+    ) -> Result<(), DomainError> {
+        self.applied_at = applied_at;
         self.update_audit(updated_by);
         Ok(())
     }

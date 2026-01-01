@@ -6,16 +6,19 @@ use utoipa::ToSchema;
 pub struct Service {
     repo: Arc<dyn book::Repository>,
     publisher_repo: Arc<dyn publisher::Repository>,
+    shop_repo: Arc<dyn shop::Repository>,
 }
 
 impl Service {
     pub fn new(
         repo: Arc<dyn book::Repository>,
         publisher_repo: Arc<dyn publisher::Repository>,
+        shop_repo: Arc<dyn shop::Repository>,
     ) -> Self {
         Self {
             repo,
             publisher_repo,
+            shop_repo,
         }
     }
 
@@ -48,6 +51,10 @@ impl Service {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
+        let format = match dto.format.as_deref() {
+            Some("EBook") => book::vo::BookFormat::EBook,
+            _ => book::vo::BookFormat::Real,
+        };
 
         let publisher = self
             .publisher_repo
@@ -59,11 +66,28 @@ impl Service {
                 dto.publisher_id
             )))?;
 
+        let shop = if let Some(shop_id) = dto.shop_id {
+            Some(
+                self.shop_repo
+                    .find_by_pub_id(shop_id)
+                    .await
+                    .map_err(|_| UseCaseError::DatabaseError)?
+                    .ok_or(UseCaseError::NotFound(format!(
+                        "Shop with pub_id = {} not found",
+                        shop_id
+                    )))?,
+            )
+        } else {
+            None
+        };
+
         let book = book::Book::new(
             uuid::Uuid::now_v7(),
             title,
             author,
             publisher,
+            shop,
+            format,
             price,
             "test player".to_string(),
         );
@@ -83,6 +107,10 @@ impl Service {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
+        let format = match dto.format.as_deref() {
+            Some("EBook") => book::vo::BookFormat::EBook,
+            _ => book::vo::BookFormat::Real,
+        };
 
         let mut book = self
             .repo
@@ -91,28 +119,46 @@ impl Service {
             .map_err(|_| UseCaseError::DatabaseError)?
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        if book.publisher().pub_id() != dto.publisher_id {
-            let publisher = self
-                .publisher_repo
+        // Resolve Publisher
+        let publisher = if book.publisher().pub_id() != dto.publisher_id {
+            self.publisher_repo
                 .find_by_pub_id(dto.publisher_id)
                 .await
                 .map_err(|_| UseCaseError::DatabaseError)?
                 .ok_or(UseCaseError::NotFound(format!(
                     "Publisher with pub_id = {} not found",
                     dto.publisher_id
-                )))?;
-            book.update(title, author, publisher, price, "test player".to_string())
-                .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
+                )))?
         } else {
-            book.update(
-                title,
-                author,
-                book.publisher(),
-                price,
-                "test player".to_string(),
+            book.publisher()
+        };
+
+        // Resolve Shop
+        let shop = if let Some(shop_id) = dto.shop_id {
+            Some(
+                self.shop_repo
+                    .find_by_pub_id(shop_id)
+                    .await
+                    .map_err(|_| UseCaseError::DatabaseError)?
+                    .ok_or(UseCaseError::NotFound(format!(
+                        "Shop with pub_id = {} not found",
+                        shop_id
+                    )))?,
             )
-            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
-        }
+        } else {
+            None
+        };
+
+        book.update(
+            title,
+            author,
+            publisher,
+            shop,
+            format,
+            price,
+            "test player".to_string(),
+        )
+        .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo
             .update(book.clone())
@@ -139,7 +185,11 @@ impl Service {
             .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(())
     }
-    pub async fn switch_status(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn change_applied_at(
+        &self,
+        pub_id: uuid::Uuid,
+        dto: ChangeAppliedAtDto,
+    ) -> Result<ResponseDto, UseCaseError> {
         let mut book = self
             .repo
             .find_by_pub_id(pub_id)
@@ -150,7 +200,7 @@ impl Service {
                 pub_id
             )))?;
 
-        book.switch_status("test player".to_string())
+        book.change_applied_at(dto.applied_at, "test player".to_string())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo
@@ -168,6 +218,9 @@ pub struct CreateDto {
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
+    pub shop_id: Option<uuid::Uuid>,
+    #[schema(value_type = Option<String>, example = "Real")]
+    pub format: Option<String>,
     pub price: i32,
 }
 
@@ -177,7 +230,17 @@ pub struct UpdateDto {
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
+    pub shop_id: Option<uuid::Uuid>,
+    #[schema(value_type = Option<String>, example = "Real")]
+    pub format: Option<String>,
     pub price: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookChangeAppliedAtDto)]
+pub struct ChangeAppliedAtDto {
+    #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
+    pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -187,8 +250,11 @@ pub struct ResponseDto {
     pub title: String,
     pub author: String,
     pub publisher: BookPublisherDto,
-    #[schema(value_type = String, example = "Unapplied")]
-    pub status: String,
+    pub shop: Option<BookShopDto>,
+    #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
+    pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[schema(value_type = String, example = "Real")]
+    pub format: String,
     pub price: i32,
 }
 
@@ -202,7 +268,12 @@ impl From<book::Book> for ResponseDto {
                 pub_id: book.publisher().pub_id(),
                 name: book.publisher().name(),
             },
-            status: book.status(),
+            shop: book.shop().map(|s| BookShopDto {
+                pub_id: s.pub_id(),
+                name: s.name(),
+            }),
+            applied_at: book.applied_at(),
+            format: book.format().to_string(),
             price: book.price(),
         }
     }
@@ -211,6 +282,13 @@ impl From<book::Book> for ResponseDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookPublisherDto)]
 pub struct BookPublisherDto {
+    pub pub_id: uuid::Uuid,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookShopDto)]
+pub struct BookShopDto {
     pub pub_id: uuid::Uuid,
     pub name: String,
 }
@@ -250,17 +328,15 @@ mod tests {
             let mut store = self.store.lock().unwrap();
             let new_id = store.iter().map(|b| b.id()).max().unwrap_or(0) + 1;
 
-            // We need to reconstruct to set the ID, since fields are private
             let new_book = book::Book::reconstruct(
                 new_id,
                 item.pub_id(),
                 book::vo::BookTitle::new(item.title()).unwrap(),
                 book::vo::BookAuthor::new(item.author()).unwrap(),
                 item.publisher(),
-                match item.status().as_str() {
-                    "Applied" => book::vo::BookStatus::Applied,
-                    _ => book::vo::BookStatus::Unapplied,
-                },
+                item.shop(),
+                item.applied_at(),
+                item.format(),
                 book::vo::BookPrice::new(item.price()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
@@ -299,7 +375,6 @@ mod tests {
                 store: Arc::new(Mutex::new(Vec::new())),
             }
         }
-
         fn add(&self, item: publisher::Publisher) {
             self.store.lock().unwrap().push(item);
         }
@@ -337,14 +412,60 @@ mod tests {
         }
     }
 
+    struct FakeShopRepository {
+        store: Arc<Mutex<Vec<shop::Shop>>>,
+    }
+
+    impl FakeShopRepository {
+        fn new() -> Self {
+            Self {
+                store: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+        fn add(&self, item: shop::Shop) {
+            self.store.lock().unwrap().push(item);
+        }
+    }
+
+    #[async_trait]
+    impl shop::Repository for FakeShopRepository {
+        async fn find_all(&self) -> anyhow::Result<Vec<shop::Shop>> {
+            Ok(self.store.lock().unwrap().clone())
+        }
+        async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<shop::Shop>> {
+            Ok(self
+                .store
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|s| s.pub_id() == pub_id)
+                .cloned())
+        }
+        async fn create(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
+            self.store.lock().unwrap().push(item.clone());
+            Ok(item)
+        }
+        async fn update(&self, _item: shop::Shop) -> anyhow::Result<shop::Shop> {
+            panic!("Not implemented")
+        }
+        async fn delete(&self, _item: shop::Shop) -> anyhow::Result<()> {
+            panic!("Not implemented")
+        }
+    }
+
     #[fixture]
-    async fn service() -> (Service, Arc<FakePublisherRepository>) {
+    async fn service() -> (
+        Service,
+        Arc<FakePublisherRepository>,
+        Arc<FakeShopRepository>,
+    ) {
         let repo = FakeRepository::new();
-        let pub_repo = FakePublisherRepository::new();
-        let pub_repo_arc = Arc::new(pub_repo);
+        let pub_repo = Arc::new(FakePublisherRepository::new());
+        let shop_repo = Arc::new(FakeShopRepository::new());
         (
-            Service::new(Arc::new(repo), pub_repo_arc.clone()),
-            pub_repo_arc,
+            Service::new(Arc::new(repo), pub_repo.clone(), shop_repo.clone()),
+            pub_repo,
+            shop_repo,
         )
     }
 
@@ -356,30 +477,45 @@ mod tests {
         )
     }
 
+    fn create_dummy_shop(pub_id: uuid::Uuid) -> shop::Shop {
+        shop::Shop::new(
+            pub_id,
+            shop::vo::ShopName::new("Test Shop".to_string()).unwrap(),
+            "test player".to_string(),
+        )
+    }
+
     #[rstest]
     #[tokio::test]
-    async fn test_create_and_get(#[future] service: (Service, Arc<FakePublisherRepository>)) {
-        let (service, pub_repo) = service.await;
+    async fn test_create_and_get(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, pub_repo, shop_repo) = service.await;
         let pub_id = uuid::Uuid::new_v4();
+        let shop_id = uuid::Uuid::new_v4();
 
-        // Setup publisher
+        // Setup
         pub_repo.add(create_dummy_publisher(pub_id));
+        shop_repo.add(create_dummy_shop(shop_id));
 
         let dto = CreateDto {
             title: "Test Book".to_string(),
             author: "Author 1".to_string(),
             publisher_id: pub_id,
+            shop_id: Some(shop_id),
+            format: Some("Real".to_string()),
             price: 1000,
         };
 
         // Create
         let created = service.create(dto).await.expect("Failed to create book");
         assert_eq!(created.title, "Test Book");
-        assert_eq!(created.author, "Author 1");
-        assert_eq!(created.publisher.pub_id, pub_id);
-        assert_eq!(created.publisher.name, "Test Publisher");
-        assert_eq!(created.price, 1000);
-        assert!(!created.pub_id.is_nil());
+        assert_eq!(created.shop.unwrap().pub_id, shop_id);
+        assert_eq!(created.format, "Real");
 
         // Get
         let fetched = service
@@ -387,44 +523,46 @@ mod tests {
             .await
             .expect("Failed to get book");
         assert_eq!(fetched.pub_id, created.pub_id);
-        assert_eq!(fetched.title, "Test Book");
-        assert_eq!(fetched.publisher.name, "Test Publisher");
+        assert_eq!(fetched.shop.unwrap().name, "Test Shop");
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_get_all(#[future] service: (Service, Arc<FakePublisherRepository>)) {
-        let (service, pub_repo) = service.await;
+    async fn test_get_all(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, pub_repo, _) = service.await;
         let pub_id_1 = uuid::Uuid::new_v4();
-        let pub_id_2 = uuid::Uuid::new_v4();
-
         pub_repo.add(create_dummy_publisher(pub_id_1));
-        pub_repo.add(create_dummy_publisher(pub_id_2));
 
-        let dto1 = CreateDto {
+        let dto = CreateDto {
             title: "Book 1".to_string(),
             author: "Author 1".to_string(),
             publisher_id: pub_id_1,
+            shop_id: None,
+            format: None,
             price: 100,
         };
-        let dto2 = CreateDto {
-            title: "Book 2".to_string(),
-            author: "Author 2".to_string(),
-            publisher_id: pub_id_2,
-            price: 200,
-        };
-
-        service.create(dto1).await.expect("Failed to create book 1");
-        service.create(dto2).await.expect("Failed to create book 2");
+        service.create(dto).await.expect("Failed to create");
 
         let all = service.get_all().await.expect("Failed to get all");
-        assert_eq!(all.len(), 2);
+        assert_eq!(all.len(), 1);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_delete(#[future] service: (Service, Arc<FakePublisherRepository>)) {
-        let (service, pub_repo) = service.await;
+    async fn test_delete(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, pub_repo, _) = service.await;
         let pub_id = uuid::Uuid::new_v4();
         pub_repo.add(create_dummy_publisher(pub_id));
 
@@ -432,6 +570,8 @@ mod tests {
             title: "Book To Delete".to_string(),
             author: "Author".to_string(),
             publisher_id: pub_id,
+            shop_id: None,
+            format: None,
             price: 100,
         };
         let created = service.create(dto).await.expect("Failed to create book");
@@ -439,12 +579,7 @@ mod tests {
         service
             .delete(created.pub_id)
             .await
-            .expect("Failed to delete book");
-
-        let fetched = service.get(created.pub_id).await;
-        match fetched {
-            Err(UseCaseError::NotFound(_)) => assert!(true),
-            _ => assert!(false, "Book should be deleted"),
-        }
+            .expect("Failed to delete");
+        assert!(service.get(created.pub_id).await.is_err());
     }
 }

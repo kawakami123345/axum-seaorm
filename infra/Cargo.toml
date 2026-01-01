@@ -5,10 +5,13 @@ edition = "2024"
 
 [dependencies]
 
+tokio = { workspace = true, optional = true }
+sea-orm = { workspace = true }
 book = { workspace = true }
 publisher = { workspace = true }
-sea-orm = { workspace = true }
-tokio = { workspace = true, optional = true }
+usecase = { workspace = true }
+api = { workspace = true }
+shop = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }

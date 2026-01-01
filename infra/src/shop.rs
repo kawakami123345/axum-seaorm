@@ -4,7 +4,7 @@ use sea_orm::sea_query::StringLen;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "publisher")]
+#[sea_orm(table_name = "shop")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
@@ -43,10 +43,10 @@ impl SqlRepository {
         Self { db }
     }
 
-    fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
-        let name = publisher::vo::PublisherName::new(model.name)
+    fn to_domain(model: Model) -> anyhow::Result<shop::Shop> {
+        let name = shop::vo::ShopName::new(model.name)
             .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
-        Ok(publisher::Publisher::reconstruct(
+        Ok(shop::Shop::reconstruct(
             model.id,
             model.pub_id,
             name,
@@ -59,27 +59,24 @@ impl SqlRepository {
 }
 
 #[async_trait]
-impl publisher::Repository for SqlRepository {
-    async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
-        let publishers = Entity::find().all(&self.db).await?;
-        publishers.into_iter().map(Self::to_domain).collect()
+impl shop::Repository for SqlRepository {
+    async fn find_all(&self) -> anyhow::Result<Vec<shop::Shop>> {
+        let shops = Entity::find().all(&self.db).await?;
+        shops.into_iter().map(Self::to_domain).collect()
     }
 
-    async fn find_by_pub_id(
-        &self,
-        pub_id: uuid::Uuid,
-    ) -> anyhow::Result<Option<publisher::Publisher>> {
-        let publisher = Entity::find()
+    async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<shop::Shop>> {
+        let shop = Entity::find()
             .filter(Column::PubId.eq(pub_id))
             .one(&self.db)
             .await?;
-        match publisher {
-            Some(p) => Ok(Some(Self::to_domain(p)?)),
+        match shop {
+            Some(s) => Ok(Some(Self::to_domain(s)?)),
             None => Ok(None),
         }
     }
 
-    async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+    async fn create(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
         let active_model = ActiveModel {
             pub_id: Set(item.pub_id()),
             name: Set(item.name()),
@@ -94,7 +91,7 @@ impl publisher::Repository for SqlRepository {
         Ok(Self::to_domain(result)?)
     }
 
-    async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+    async fn update(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
         let active_model = ActiveModel {
             id: Set(item.id()),
             pub_id: Set(item.pub_id()),
@@ -109,7 +106,7 @@ impl publisher::Repository for SqlRepository {
         Ok(Self::to_domain(result)?)
     }
 
-    async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
+    async fn delete(&self, item: shop::Shop) -> anyhow::Result<()> {
         Entity::delete_by_id(item.id()).exec(&self.db).await?;
         Ok(())
     }

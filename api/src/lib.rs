@@ -1,6 +1,7 @@
 pub mod book;
 pub mod error;
 pub mod publisher;
+pub mod shop;
 
 use axum::Router;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ pub struct ApiDoc;
 pub struct AppState {
     pub book_usecase: usecase::book::Service,
     pub publisher_usecase: usecase::publisher::Service,
+    pub shop_usecase: usecase::shop::Service,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -22,12 +24,18 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // routes!はPath毎に分ける必要あり
         .routes(routes!(book::get_all, book::create))
         .routes(routes!(book::get, book::update, book::delete))
-        .routes(routes!(book::switch_status))
+        .routes(routes!(book::change_applied_at))
         .routes(routes!(publisher::get_all, publisher::create))
         .routes(routes!(
             publisher::get,
             publisher::update,
             publisher::delete
+        ))
+        .routes(routes!(shop::get_all_shops, shop::create_shop))
+        .routes(routes!(
+            shop::get_shop,
+            shop::update_shop,
+            shop::delete_shop
         ))
         .split_for_parts();
 

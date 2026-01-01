@@ -14,4 +14,6 @@ pub enum UseCaseError {
     BookDomainError(#[from] book::DomainError),
     #[error("Domain error occurred: {0}")]
     PublisherDomainError(#[from] publisher::DomainError),
+    #[error("Domain error occurred: {0}")]
+    ShopDomainError(#[from] shop::DomainError),
 }
