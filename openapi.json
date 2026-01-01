@@ -164,6 +164,41 @@
         }
       }
     },
+    "/books/{pub_id}/switch_status": {
+      "put": {
+        "tags": [
+          "Book"
+        ],
+        "operationId": "switch_book_status",
+        "parameters": [
+          {
+            "name": "pub_id",
+            "in": "path",
+            "description": "Book pub_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Book status switched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Book not found"
+          }
+        }
+      }
+    },
     "/publishers": {
       "get": {
         "tags": [
@@ -328,7 +363,6 @@
           "title",
           "author",
           "publisher_id",
-          "status",
           "price"
         ],
         "properties": {
@@ -342,10 +376,6 @@
           "publisher_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "status": {
-            "type": "string",
-            "example": "Unapplied"
           },
           "title": {
             "type": "string"
@@ -405,11 +435,9 @@
       "BookUpdateDto": {
         "type": "object",
         "required": [
-          "pub_id",
           "title",
           "author",
           "publisher_id",
-          "status",
           "price"
         ],
         "properties": {
@@ -420,17 +448,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "pub_id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "publisher_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "status": {
-            "type": "string",
-            "example": "Unapplied"
           },
           "title": {
             "type": "string"
@@ -467,16 +487,11 @@
       "PublisherUpdateDto": {
         "type": "object",
         "required": [
-          "pub_id",
           "name"
         ],
         "properties": {
           "name": {
             "type": "string"
-          },
-          "pub_id": {
-            "type": "string",
-            "format": "uuid"
           }
         }
       }

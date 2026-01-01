@@ -165,7 +165,6 @@ pub struct CreateDto {
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
-    #[schema(value_type = String, example = "Unapplied")]
     pub price: i32,
 }
 
@@ -175,7 +174,6 @@ pub struct UpdateDto {
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
-    #[schema(value_type = String, example = "Unapplied")]
     pub price: i32,
 }
 
