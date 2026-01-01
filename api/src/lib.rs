@@ -1,4 +1,5 @@
 pub mod book;
+pub mod error;
 pub mod publisher;
 
 use axum::Router;

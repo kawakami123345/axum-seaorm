@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::error::AppError;
 use axum::{
     Json,
     extract::{Path, State},
@@ -19,7 +20,7 @@ use std::sync::Arc;
 pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.book_usecase.get_all().await {
         Ok(books) => (StatusCode::OK, Json(books)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }
 
@@ -42,7 +43,7 @@ pub async fn get(
 ) -> impl IntoResponse {
     match state.book_usecase.get(pub_id).await {
         Ok(book) => (StatusCode::OK, Json(book)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }
 
@@ -62,7 +63,7 @@ pub async fn create(
 ) -> impl IntoResponse {
     match state.book_usecase.create(payload).await {
         Ok(book) => (StatusCode::CREATED, Json(book)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }
 
@@ -87,7 +88,7 @@ pub async fn update(
 ) -> impl IntoResponse {
     match state.book_usecase.update(pub_id, payload).await {
         Ok(book) => (StatusCode::OK, Json(book)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }
 
@@ -110,7 +111,7 @@ pub async fn delete(
 ) -> impl IntoResponse {
     match state.book_usecase.delete(pub_id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }
 
@@ -133,6 +134,6 @@ pub async fn switch_status(
 ) -> impl IntoResponse {
     match state.book_usecase.switch_status(pub_id).await {
         Ok(book) => (StatusCode::OK, Json(book)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => AppError(e).into_response(),
     }
 }

@@ -1,4 +1,4 @@
-use crate::error::ApiError;
+use crate::error::UseCaseError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -12,29 +12,29 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, ApiError> {
+    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
         let publishers = self
             .repo
             .find_all()
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
+    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
             )))?;
         Ok(publisher.into())
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
+    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher =
             publisher::Publisher::new(uuid::Uuid::now_v7(), name, "test player".to_string());
@@ -42,7 +42,7 @@ impl Service {
             .repo
             .create(publisher)
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(result.into())
     }
 
@@ -50,37 +50,37 @@ impl Service {
         &self,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
-    ) -> Result<ResponseDto, ApiError> {
+    ) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let mut publisher = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
             )))?;
 
         publisher
             .update(name, "test player".to_string())
-            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         let result = self
             .repo
             .update(publisher)
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(result.into())
     }
 
-    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), ApiError> {
+    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Publisher with pub_id = {} not found",
                 pub_id
             )))?;
@@ -88,7 +88,7 @@ impl Service {
         self.repo
             .delete(publisher)
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(())
     }
 }
@@ -115,8 +115,8 @@ pub struct ResponseDto {
 impl From<publisher::Publisher> for ResponseDto {
     fn from(publisher: publisher::Publisher) -> Self {
         Self {
-            pub_id: publisher.pub_id,
-            name: publisher.name.value().to_string(),
+            pub_id: *publisher.pub_id(),
+            name: publisher.name().value().to_string(),
         }
     }
 }
@@ -152,23 +152,30 @@ mod tests {
             pub_id: uuid::Uuid,
         ) -> anyhow::Result<Option<publisher::Publisher>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|p| p.pub_id == pub_id).cloned())
+            Ok(store.iter().find(|p| p.pub_id() == &pub_id).cloned())
         }
 
-        async fn create(
-            &self,
-            mut item: publisher::Publisher,
-        ) -> anyhow::Result<publisher::Publisher> {
+        async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
             let mut store = self.store.lock().unwrap();
-            let new_id = store.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-            item.id = new_id;
-            store.push(item.clone());
-            Ok(item)
+            let new_id = store.iter().map(|p| p.id()).max().unwrap_or(0) + 1;
+
+            let new_publisher = publisher::Publisher::reconstruct(
+                new_id,
+                *item.pub_id(),
+                item.name().clone(),
+                *item.created_at(),
+                *item.updated_at(),
+                item.created_by().to_string(),
+                item.updated_by().to_string(),
+            );
+
+            store.push(new_publisher.clone());
+            Ok(new_publisher)
         }
 
         async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
             let mut store = self.store.lock().unwrap();
-            if let Some(index) = store.iter().position(|p| p.id == item.id) {
+            if let Some(index) = store.iter().position(|p| p.id() == item.id()) {
                 store[index] = item.clone();
                 Ok(item)
             } else {
@@ -178,7 +185,7 @@ mod tests {
 
         async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
-            store.retain(|p| p.pub_id != item.pub_id);
+            store.retain(|p| p.pub_id() != item.pub_id());
             Ok(())
         }
     }
@@ -263,7 +270,7 @@ mod tests {
         let result = service.get(created.pub_id).await;
         assert!(result.is_err());
         match result {
-            Err(ApiError::NotFound(_)) => (),
+            Err(UseCaseError::NotFound(_)) => (),
             _ => panic!("Expected NotFound error"),
         }
     }

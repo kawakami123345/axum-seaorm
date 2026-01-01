@@ -40,7 +40,7 @@ impl BookAuthor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum BookStatus {
     Unapplied,
     Applied,
@@ -55,7 +55,7 @@ impl BookStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct BookPrice(i32);
 

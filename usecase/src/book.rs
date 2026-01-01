@@ -1,4 +1,4 @@
-use crate::error::ApiError;
+use crate::error::UseCaseError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -19,29 +19,32 @@ impl Service {
         }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, ApiError> {
+    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
         let books = self
             .repo
             .find_all()
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
 
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
         Ok(response_dtos)
     }
 
-    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
+    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!("Book with pub_id = {}", pub_id)))?;
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
+                "Book with pub_id = {}",
+                pub_id
+            )))?;
 
         Ok(book.into())
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
+    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
@@ -50,8 +53,8 @@ impl Service {
             .publisher_repo
             .find_by_pub_id(dto.publisher_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Publisher with pub_id = {} not found",
                 dto.publisher_id
             )))?;
@@ -67,7 +70,7 @@ impl Service {
         self.repo
             .create(book.clone())
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
 
         Ok(book.into())
     }
@@ -76,7 +79,7 @@ impl Service {
         &self,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
-    ) -> Result<ResponseDto, ApiError> {
+    ) -> Result<ResponseDto, UseCaseError> {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
@@ -85,47 +88,47 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound("Book not found".to_string()))?;
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        if book.publisher.pub_id != dto.publisher_id {
+        if book.publisher().pub_id() != &dto.publisher_id {
             let publisher = self
                 .publisher_repo
                 .find_by_pub_id(dto.publisher_id)
                 .await
-                .map_err(|_| ApiError::DatabaseError)?
-                .ok_or(ApiError::NotFound(format!(
+                .map_err(|_| UseCaseError::DatabaseError)?
+                .ok_or(UseCaseError::NotFound(format!(
                     "Publisher with pub_id = {} not found",
                     dto.publisher_id
                 )))?;
             book.update(title, author, publisher, price, "test player".to_string())
-                .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+                .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
         } else {
             book.update(
                 title,
                 author,
-                book.publisher.clone(),
+                book.publisher().clone(),
                 price,
                 "test player".to_string(),
             )
-            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
         }
 
         self.repo
             .update(book.clone())
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
 
         Ok(book.into())
     }
 
-    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), ApiError> {
+    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Book with pub_id = {} not found",
                 pub_id
             )))?;
@@ -133,27 +136,27 @@ impl Service {
         self.repo
             .delete(book)
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
         Ok(())
     }
-    pub async fn switch_status(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
+    pub async fn switch_status(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
         let mut book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!(
+            .map_err(|_| UseCaseError::DatabaseError)?
+            .ok_or(UseCaseError::NotFound(format!(
                 "Book with pub_id = {} not found",
                 pub_id
             )))?;
 
         book.switch_status("test player".to_string())
-            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo
             .update(book.clone())
             .await
-            .map_err(|_| ApiError::DatabaseError)?;
+            .map_err(|_| UseCaseError::DatabaseError)?;
 
         Ok(book.into())
     }
@@ -192,15 +195,15 @@ pub struct ResponseDto {
 impl From<book::Book> for ResponseDto {
     fn from(book: book::Book) -> Self {
         Self {
-            pub_id: book.pub_id,
-            title: book.title.value().to_string(),
-            author: book.author.value().to_string(),
+            pub_id: *book.pub_id(),
+            title: book.title().value().to_string(),
+            author: book.author().value().to_string(),
             publisher: BookPublisherDto {
-                pub_id: book.publisher.pub_id,
-                name: book.publisher.name.value().to_string(),
+                pub_id: *book.publisher().pub_id(),
+                name: book.publisher().name().value().to_string(),
             },
-            status: book.status,
-            price: book.price.value(),
+            status: *book.status(),
+            price: book.price().value(),
         }
     }
 }
@@ -240,20 +243,35 @@ mod tests {
 
         async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<book::Book>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|b| b.pub_id == pub_id).cloned())
+            Ok(store.iter().find(|b| b.pub_id() == &pub_id).cloned())
         }
 
-        async fn create(&self, mut item: book::Book) -> anyhow::Result<book::Book> {
+        async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
             let mut store = self.store.lock().unwrap();
-            let new_id = store.iter().map(|b| b.id).max().unwrap_or(0) + 1;
-            item.id = new_id;
-            store.push(item.clone());
-            Ok(item)
+            let new_id = store.iter().map(|b| b.id()).max().unwrap_or(0) + 1;
+
+            // We need to reconstruct to set the ID, since fields are private
+            let new_book = book::Book::reconstruct(
+                new_id,
+                *item.pub_id(),
+                item.title().clone(),
+                item.author().clone(),
+                item.publisher().clone(),
+                *item.status(),
+                *item.price(),
+                *item.created_at(),
+                *item.updated_at(),
+                item.created_by().to_string(),
+                item.updated_by().to_string(),
+            );
+
+            store.push(new_book.clone());
+            Ok(new_book)
         }
 
         async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
             let mut store = self.store.lock().unwrap();
-            if let Some(index) = store.iter().position(|b| b.id == item.id) {
+            if let Some(index) = store.iter().position(|b| b.id() == item.id()) {
                 store[index] = item.clone();
                 Ok(item)
             } else {
@@ -263,7 +281,7 @@ mod tests {
 
         async fn delete(&self, item: book::Book) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
-            store.retain(|b| b.pub_id != item.pub_id);
+            store.retain(|b| b.pub_id() != item.pub_id());
             Ok(())
         }
     }
@@ -298,7 +316,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .find(|p| p.pub_id == pub_id)
+                .find(|p| p.pub_id() == &pub_id)
                 .cloned())
         }
         async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
@@ -328,15 +346,11 @@ mod tests {
     }
 
     fn create_dummy_publisher(pub_id: uuid::Uuid) -> publisher::Publisher {
-        publisher::Publisher {
-            id: 1,
+        publisher::Publisher::new(
             pub_id,
-            name: publisher::vo::PublisherName::new("Test Publisher".to_string()).unwrap(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            created_by: "test player".to_string(),
-            updated_by: "test player".to_string(),
-        }
+            publisher::vo::PublisherName::new("Test Publisher".to_string()).unwrap(),
+            "test player".to_string(),
+        )
     }
 
     #[rstest]
@@ -426,7 +440,7 @@ mod tests {
 
         let fetched = service.get(created.pub_id).await;
         match fetched {
-            Err(ApiError::NotFound(_)) => assert!(true),
+            Err(UseCaseError::NotFound(_)) => assert!(true),
             _ => assert!(false, "Book should be deleted"),
         }
     }

@@ -15,17 +15,17 @@ pub trait Repository: Sync + Send {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Book {
-    pub id: i32,
-    pub pub_id: uuid::Uuid,
-    pub title: vo::BookTitle,
-    pub author: vo::BookAuthor,
-    pub publisher: publisher::Publisher,
-    pub status: vo::BookStatus,
-    pub price: vo::BookPrice,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub created_by: String,
-    pub updated_by: String,
+    id: i32,
+    pub_id: uuid::Uuid,
+    title: vo::BookTitle,
+    author: vo::BookAuthor,
+    publisher: publisher::Publisher,
+    status: vo::BookStatus,
+    price: vo::BookPrice,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by: String,
+    updated_by: String,
 }
 
 impl Book {
@@ -51,6 +51,69 @@ impl Book {
             created_by: created_by.clone(),
             updated_by: created_by,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn reconstruct(
+        id: i32,
+        pub_id: uuid::Uuid,
+        title: vo::BookTitle,
+        author: vo::BookAuthor,
+        publisher: publisher::Publisher,
+        status: vo::BookStatus,
+        price: vo::BookPrice,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
+        created_by: String,
+        updated_by: String,
+    ) -> Self {
+        Self {
+            id,
+            pub_id,
+            title,
+            author,
+            publisher,
+            status,
+            price,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+        }
+    }
+
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+    pub fn pub_id(&self) -> &uuid::Uuid {
+        &self.pub_id
+    }
+    pub fn title(&self) -> &vo::BookTitle {
+        &self.title
+    }
+    pub fn author(&self) -> &vo::BookAuthor {
+        &self.author
+    }
+    pub fn publisher(&self) -> &publisher::Publisher {
+        &self.publisher
+    }
+    pub fn status(&self) -> &vo::BookStatus {
+        &self.status
+    }
+    pub fn price(&self) -> &vo::BookPrice {
+        &self.price
+    }
+    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
+    }
+    pub fn updated_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.updated_at
+    }
+    pub fn created_by(&self) -> &str {
+        &self.created_by
+    }
+    pub fn updated_by(&self) -> &str {
+        &self.updated_by
     }
 
     fn update_audit(&mut self, updated_by: String) {

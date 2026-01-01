@@ -64,33 +64,33 @@ impl SqlRepository {
         };
 
         let publisher_entity = if let Some(p) = publisher {
-            publisher::Publisher {
-                id: p.id,
-                pub_id: p.pub_id,
-                name: publisher::vo::PublisherName::new(p.name)
+            publisher::Publisher::reconstruct(
+                p.id,
+                p.pub_id,
+                publisher::vo::PublisherName::new(p.name)
                     .map_err(|e| anyhow::anyhow!("Invalid publisher name in DB: {}", e))?,
-                created_at: p.created_at,
-                updated_at: p.updated_at,
-                created_by: p.created_by,
-                updated_by: p.updated_by,
-            }
+                p.created_at,
+                p.updated_at,
+                p.created_by,
+                p.updated_by,
+            )
         } else {
             return Err(anyhow::anyhow!("Publisher not found for book {}", model.id));
         };
 
-        Ok(book::Book {
-            id: model.id,
-            pub_id: model.pub_id,
+        Ok(book::Book::reconstruct(
+            model.id,
+            model.pub_id,
             title,
             author,
-            publisher: publisher_entity,
+            publisher_entity,
             status,
             price,
-            created_at: model.created_at,
-            updated_at: model.updated_at,
-            created_by: model.created_by,
-            updated_by: model.updated_by,
-        })
+            model.created_at,
+            model.updated_at,
+            model.created_by,
+            model.updated_by,
+        ))
     }
 }
 
@@ -123,24 +123,27 @@ impl book::Repository for SqlRepository {
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let publisher = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(item.publisher.pub_id))
+            .filter(super::publisher::Column::PubId.eq(*item.publisher().pub_id()))
             .one(&self.db)
             .await?
             .ok_or_else(|| {
-                anyhow::anyhow!("Publisher with UUID {} not found", item.publisher.pub_id)
+                anyhow::anyhow!(
+                    "Publisher with UUID {} not found",
+                    item.publisher().pub_id()
+                )
             })?;
 
         let active_model = ActiveModel {
-            pub_id: Set(item.pub_id),
-            title: Set(item.title.value().to_string()),
-            author: Set(item.author.value().to_string()),
+            pub_id: Set(*item.pub_id()),
+            title: Set(item.title().value().to_string()),
+            author: Set(item.author().value().to_string()),
             publisher_id: Set(publisher.id),
-            status: Set(item.status.value().to_string()),
-            price: Set(item.price.value()),
-            created_at: Set(item.created_at),
-            updated_at: Set(item.updated_at),
-            created_by: Set(item.created_by),
-            updated_by: Set(item.updated_by),
+            status: Set(item.status().value().to_string()),
+            price: Set(item.price().value()),
+            created_at: Set(*item.created_at()),
+            updated_at: Set(*item.updated_at()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
             ..Default::default()
         };
 
@@ -150,25 +153,28 @@ impl book::Repository for SqlRepository {
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let publisher = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(item.publisher.pub_id))
+            .filter(super::publisher::Column::PubId.eq(*item.publisher().pub_id()))
             .one(&self.db)
             .await?
             .ok_or_else(|| {
-                anyhow::anyhow!("Publisher with UUID {} not found", item.publisher.pub_id)
+                anyhow::anyhow!(
+                    "Publisher with UUID {} not found",
+                    item.publisher().pub_id()
+                )
             })?;
 
         let active_model = ActiveModel {
-            id: Set(item.id),
-            pub_id: Set(item.pub_id),
-            title: Set(item.title.value().to_string()),
-            author: Set(item.author.value().to_string()),
+            id: Set(item.id()),
+            pub_id: Set(*item.pub_id()),
+            title: Set(item.title().value().to_string()),
+            author: Set(item.author().value().to_string()),
             publisher_id: Set(publisher.id),
-            status: Set(item.status.value().to_string()),
-            price: Set(item.price.value()),
-            created_at: Set(item.created_at),
-            updated_at: Set(item.updated_at),
-            created_by: Set(item.created_by),
-            updated_by: Set(item.updated_by),
+            status: Set(item.status().value().to_string()),
+            price: Set(item.price().value()),
+            created_at: Set(*item.created_at()),
+            updated_at: Set(*item.updated_at()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
         };
 
         let result = active_model.update(&self.db).await?;
@@ -176,7 +182,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn delete(&self, item: book::Book) -> anyhow::Result<()> {
-        Entity::delete_by_id(item.id).exec(&self.db).await?;
+        Entity::delete_by_id(item.id()).exec(&self.db).await?;
         Ok(())
     }
 }

@@ -1,8 +1,7 @@
-use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ApiError {
+pub enum UseCaseError {
     #[error("Entity not found")]
     NotFound(String),
     #[error("Internal server error")]
@@ -15,19 +14,4 @@ pub enum ApiError {
     BookDomainError(#[from] book::DomainError),
     #[error("Domain error occurred: {0}")]
     PublisherDomainError(#[from] publisher::DomainError),
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
-            ApiError::InternalServerError | ApiError::DatabaseError => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            ApiError::BookDomainError(_)
-            | ApiError::PublisherDomainError(_)
-            | ApiError::DomainRuleViolation(_) => StatusCode::BAD_REQUEST,
-        }
-        .into_response()
-    }
 }

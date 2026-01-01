@@ -15,13 +15,13 @@ pub trait Repository: Sync + Send {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Publisher {
-    pub id: i32,
-    pub pub_id: uuid::Uuid,
-    pub name: vo::PublisherName,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub created_by: String,
-    pub updated_by: String,
+    id: i32,
+    pub_id: uuid::Uuid,
+    name: vo::PublisherName,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by: String,
+    updated_by: String,
 }
 
 impl Publisher {
@@ -36,6 +36,48 @@ impl Publisher {
             created_by: created_by.clone(),
             updated_by: created_by,
         }
+    }
+
+    pub fn reconstruct(
+        id: i32,
+        pub_id: uuid::Uuid,
+        name: vo::PublisherName,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
+        created_by: String,
+        updated_by: String,
+    ) -> Self {
+        Self {
+            id,
+            pub_id,
+            name,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+        }
+    }
+
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+    pub fn pub_id(&self) -> &uuid::Uuid {
+        &self.pub_id
+    }
+    pub fn name(&self) -> &vo::PublisherName {
+        &self.name
+    }
+    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
+    }
+    pub fn updated_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.updated_at
+    }
+    pub fn created_by(&self) -> &str {
+        &self.created_by
+    }
+    pub fn updated_by(&self) -> &str {
+        &self.updated_by
     }
 
     fn update_audit(&mut self, updated_by: String) {

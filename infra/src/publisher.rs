@@ -43,15 +43,15 @@ impl SqlRepository {
     fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
         let name = publisher::vo::PublisherName::new(model.name)
             .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
-        Ok(publisher::Publisher {
-            id: model.id,
-            pub_id: model.pub_id,
+        Ok(publisher::Publisher::reconstruct(
+            model.id,
+            model.pub_id,
             name,
-            created_at: model.created_at,
-            updated_at: model.updated_at,
-            created_by: model.created_by,
-            updated_by: model.updated_by,
-        })
+            model.created_at,
+            model.updated_at,
+            model.created_by,
+            model.updated_by,
+        ))
     }
 }
 
@@ -78,12 +78,12 @@ impl publisher::Repository for SqlRepository {
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
-            pub_id: Set(item.pub_id),
-            name: Set(item.name.value().to_string()),
-            created_at: Set(item.created_at),
-            updated_at: Set(item.updated_at),
-            created_by: Set(item.created_by),
-            updated_by: Set(item.updated_by),
+            pub_id: Set(*item.pub_id()),
+            name: Set(item.name().value().to_string()),
+            created_at: Set(*item.created_at()),
+            updated_at: Set(*item.updated_at()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
             ..Default::default()
         };
 
@@ -93,13 +93,13 @@ impl publisher::Repository for SqlRepository {
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
-            id: Set(item.id),
-            pub_id: Set(item.pub_id),
-            name: Set(item.name.value().to_string()),
-            created_at: Set(item.created_at),
-            updated_at: Set(item.updated_at),
-            created_by: Set(item.created_by),
-            updated_by: Set(item.updated_by),
+            id: Set(item.id()),
+            pub_id: Set(*item.pub_id()),
+            name: Set(item.name().value().to_string()),
+            created_at: Set(*item.created_at()),
+            updated_at: Set(*item.updated_at()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
         };
 
         let result = active_model.update(&self.db).await?;
@@ -107,7 +107,7 @@ impl publisher::Repository for SqlRepository {
     }
 
     async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
-        Entity::delete_by_id(item.id).exec(&self.db).await?;
+        Entity::delete_by_id(item.id()).exec(&self.db).await?;
         Ok(())
     }
 }
