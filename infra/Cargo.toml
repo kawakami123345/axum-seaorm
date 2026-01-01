@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-usecase = { workspace = true }
+
 book = { workspace = true }
 publisher = { workspace = true }
 sea-orm = { workspace = true }
@@ -14,4 +14,4 @@ async-trait = { workspace = true }
 anyhow = { workspace = true }
 
 [features]
-test = ["dep:tokio"]
+test = ["dep:tokio", "sea-orm/sqlx-sqlite"]

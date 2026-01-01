@@ -17,8 +17,8 @@ async fn main() -> anyhow::Result<()> {
 
     // 3. Dependency Injection
     let book_repo =
-        Arc::new(infra::book::PostgresRepository::new(db.clone())) as Arc<dyn book::Repository>;
-    let publisher_repo = Arc::new(infra::publisher::PostgresRepository::new(db.clone()))
+        Arc::new(infra::book::SqlRepository::new(db.clone())) as Arc<dyn book::Repository>;
+    let publisher_repo = Arc::new(infra::publisher::SqlRepository::new(db.clone()))
         as Arc<dyn publisher::Repository>;
 
     let book_usecase = usecase::book::Service::new(book_repo);

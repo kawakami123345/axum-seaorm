@@ -24,11 +24,11 @@ impl Related<super::book::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-pub struct PostgresRepository {
+pub struct SqlRepository {
     pub(crate) db: DatabaseConnection,
 }
 
-impl PostgresRepository {
+impl SqlRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
@@ -44,7 +44,7 @@ impl From<Model> for publisher::Publisher {
 }
 
 #[async_trait]
-impl publisher::Repository for PostgresRepository {
+impl publisher::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
         let publishers = Entity::find().all(&self.db).await?;
         Ok(publishers
@@ -81,74 +81,5 @@ impl publisher::Repository for PostgresRepository {
     async fn delete(&self, id: i32) -> anyhow::Result<()> {
         let _ = Entity::delete_by_id(id).exec(&self.db).await?;
         Ok(())
-    }
-}
-
-#[cfg(feature = "test")]
-#[allow(dead_code)]
-pub mod fake {
-    use async_trait::async_trait;
-    use tokio::sync::Mutex;
-
-    #[derive(Debug)]
-    pub struct FakeRepository {
-        publishers: Mutex<Vec<publisher::Publisher>>,
-    }
-
-    impl FakeRepository {
-        pub fn new(initial: Vec<publisher::Publisher>) -> Self {
-            Self {
-                publishers: Mutex::new(initial),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl publisher::Repository for FakeRepository {
-        async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
-            Ok(self.publishers.lock().await.clone())
-        }
-
-        async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<publisher::Publisher>> {
-            Ok(self
-                .publishers
-                .lock()
-                .await
-                .iter()
-                .find(|&b| b.id == id)
-                .cloned())
-        }
-
-        async fn create(
-            &self,
-            mut item: publisher::Publisher,
-        ) -> anyhow::Result<publisher::Publisher> {
-            let mut v = self.publishers.lock().await;
-            let next_id = v.iter().map(|b| b.id).max().unwrap_or(0) + 1;
-            item.id = next_id;
-            v.push(item.clone());
-            Ok(item)
-        }
-
-        async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
-            let mut v = self.publishers.lock().await;
-            if let Some(pos) = v.iter().position(|b| b.id == item.id) {
-                v[pos] = item.clone();
-                Ok(item)
-            } else {
-                Err(anyhow::anyhow!("not found"))
-            }
-        }
-
-        async fn delete(&self, id: i32) -> anyhow::Result<()> {
-            let mut v = self.publishers.lock().await;
-            let original = v.len();
-            v.retain(|b| b.id != id);
-            if v.len() == original {
-                Err(anyhow::anyhow!("not found"))
-            } else {
-                Ok(())
-            }
-        }
     }
 }
