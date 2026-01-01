@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let publisher_repo = Arc::new(infra::publisher::SqlRepository::new(db.clone()))
         as Arc<dyn publisher::Repository>;
 
-    let book_usecase = usecase::book::Service::new(book_repo);
+    let book_usecase = usecase::book::Service::new(book_repo, publisher_repo.clone());
     let publisher_usecase = usecase::publisher::Service::new(publisher_repo);
 
     let state = Arc::new(AppState {

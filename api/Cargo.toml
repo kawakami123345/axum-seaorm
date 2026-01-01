@@ -13,5 +13,7 @@ tower-http = { version = "0.5", features = ["trace", "cors"] }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+uuid = { workspace = true }
+
 
 [dev-dependencies]

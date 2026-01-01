@@ -12,6 +12,8 @@ axum = { workspace = true }
 thiserror = { workspace = true }
 utoipa = { workspace = true }
 anyhow = { workspace = true }
+uuid = { workspace = true }
+
 
 [dev-dependencies]
 rstest = { workspace = true }

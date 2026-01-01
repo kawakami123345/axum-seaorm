@@ -7,6 +7,8 @@ use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
+    #[sea_orm(unique)]
+    pub pub_id: uuid::Uuid,
     pub name: String,
 }
 
@@ -32,14 +34,15 @@ impl SqlRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
-}
 
-impl From<Model> for publisher::Publisher {
-    fn from(model: Model) -> Self {
-        publisher::Publisher {
+    fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
+        let name = publisher::vo::PublisherName::new(model.name)
+            .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
+        Ok(publisher::Publisher {
             id: model.id,
-            name: model.name,
-        }
+            pub_id: model.pub_id,
+            name,
+        })
     }
 }
 
@@ -47,39 +50,47 @@ impl From<Model> for publisher::Publisher {
 impl publisher::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
         let publishers = Entity::find().all(&self.db).await?;
-        Ok(publishers
-            .into_iter()
-            .map(publisher::Publisher::from)
-            .collect())
+        publishers.into_iter().map(Self::to_domain).collect()
     }
 
-    async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<publisher::Publisher>> {
-        let publisher = Entity::find_by_id(id).one(&self.db).await?;
-        Ok(publisher.map(publisher::Publisher::from))
+    async fn find_by_pub_id(
+        &self,
+        pub_id: uuid::Uuid,
+    ) -> anyhow::Result<Option<publisher::Publisher>> {
+        let publisher = Entity::find()
+            .filter(Column::PubId.eq(pub_id))
+            .one(&self.db)
+            .await?;
+        match publisher {
+            Some(p) => Ok(Some(Self::to_domain(p)?)),
+            None => Ok(None),
+        }
     }
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
-            name: Set(item.name),
-            ..Default::default() // id is ignored/auto-incremented
+            pub_id: Set(item.pub_id),
+            name: Set(item.name.value().to_string()),
+            ..Default::default()
         };
 
         let result = active_model.insert(&self.db).await?;
-        Ok(publisher::Publisher::from(result))
+        Self::to_domain(result)
     }
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
             id: Set(item.id),
-            name: Set(item.name),
+            pub_id: Set(item.pub_id),
+            name: Set(item.name.value().to_string()),
         };
 
         let result = active_model.update(&self.db).await?;
-        Ok(publisher::Publisher::from(result))
+        Self::to_domain(result)
     }
 
-    async fn delete(&self, id: i32) -> anyhow::Result<()> {
-        let _ = Entity::delete_by_id(id).exec(&self.db).await?;
+    async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
+        Entity::delete_by_id(item.id).exec(&self.db).await?;
         Ok(())
     }
 }

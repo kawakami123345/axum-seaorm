@@ -21,45 +21,69 @@ impl Service {
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(&self, id: i32) -> Result<ResponseDto, ApiError> {
+    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
         let publisher = self
             .repo
-            .find_by_id(id)
+            .find_by_pub_id(pub_id)
             .await
             .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!("Publisher Id = {}", id)))?;
-        Ok(ResponseDto::from(publisher))
+            .ok_or(ApiError::NotFound(format!(
+                "Publisher not found with pub_id = {}",
+                pub_id
+            )))?;
+        Ok(publisher.into())
     }
 
     pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
+        let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher {
             id: 0,
-            name: dto.name,
+            pub_id: uuid::Uuid::now_v7(),
+            name,
         };
         let result = self
             .repo
             .create(publisher)
             .await
             .map_err(|_| ApiError::DatabaseError)?;
-        Ok(ResponseDto::from(result))
+        Ok(result.into())
     }
 
     pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, ApiError> {
-        let publisher = publisher::Publisher {
-            id: dto.id,
-            name: dto.name,
-        };
+        let name = publisher::vo::PublisherName::new(dto.name)?;
+        let mut publisher = self
+            .repo
+            .find_by_pub_id(dto.pub_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!(
+                "Publisher not found with pub_id = {}",
+                dto.pub_id
+            )))?;
+
+        publisher.name = name;
+
         let result = self
             .repo
             .update(publisher)
             .await
             .map_err(|_| ApiError::DatabaseError)?;
-        Ok(ResponseDto::from(result))
+        Ok(result.into())
     }
 
-    pub async fn delete(&self, id: i32) -> Result<(), ApiError> {
+    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), ApiError> {
+        let publisher = self
+            .repo
+            .find_by_pub_id(pub_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!(
+                "Publisher with pub_id = {} not found",
+                pub_id
+            )))?;
+
         self.repo
-            .delete(id)
+            .delete(publisher)
             .await
             .map_err(|_| ApiError::DatabaseError)?;
         Ok(())
@@ -75,22 +99,22 @@ pub struct CreateDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PublisherUpdateDto)]
 pub struct UpdateDto {
-    pub id: i32,
+    pub pub_id: uuid::Uuid,
     pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PublisherResponseDto)]
 pub struct ResponseDto {
-    pub id: i32,
+    pub pub_id: uuid::Uuid,
     pub name: String,
 }
 
 impl From<publisher::Publisher> for ResponseDto {
     fn from(publisher: publisher::Publisher) -> Self {
         Self {
-            id: publisher.id,
-            name: publisher.name,
+            pub_id: publisher.pub_id,
+            name: publisher.name.value().to_string(),
         }
     }
 }
@@ -121,9 +145,12 @@ mod tests {
             Ok(store.clone())
         }
 
-        async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<publisher::Publisher>> {
+        async fn find_by_pub_id(
+            &self,
+            pub_id: uuid::Uuid,
+        ) -> anyhow::Result<Option<publisher::Publisher>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|p| p.id == id).cloned())
+            Ok(store.iter().find(|p| p.pub_id == pub_id).cloned())
         }
 
         async fn create(
@@ -147,9 +174,9 @@ mod tests {
             }
         }
 
-        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+        async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
-            store.retain(|p| p.id != id);
+            store.retain(|p| p.pub_id != item.pub_id);
             Ok(())
         }
     }
@@ -170,10 +197,10 @@ mod tests {
 
         let created = service.create(dto).await.expect("Failed to create");
         assert_eq!(created.name, "Test Publisher");
-        assert!(created.id > 0);
 
-        let fetched = service.get(created.id).await.expect("Failed to get");
+        let fetched = service.get(created.pub_id).await.expect("Failed to get");
         assert_eq!(fetched.name, "Test Publisher");
+        assert_eq!(fetched.pub_id, created.pub_id);
     }
 
     #[rstest]
@@ -204,14 +231,14 @@ mod tests {
         let created = service.create(dto).await.expect("Failed to create");
 
         let update_dto = UpdateDto {
-            id: created.id,
+            pub_id: created.pub_id,
             name: "Updated Name".to_string(),
         };
 
         let updated = service.update(update_dto).await.expect("Failed to update");
         assert_eq!(updated.name, "Updated Name");
 
-        let fetched = service.get(created.id).await.expect("Failed to get");
+        let fetched = service.get(created.pub_id).await.expect("Failed to get");
         assert_eq!(fetched.name, "Updated Name");
     }
 
@@ -224,9 +251,12 @@ mod tests {
         };
         let created = service.create(dto).await.expect("Failed to create");
 
-        service.delete(created.id).await.expect("Failed to delete");
+        service
+            .delete(created.pub_id)
+            .await
+            .expect("Failed to delete");
 
-        let result = service.get(created.id).await;
+        let result = service.get(created.pub_id).await;
         assert!(result.is_err());
         match result {
             Err(ApiError::NotFound(_)) => (),

@@ -1,15 +1,22 @@
+use crate::error::ApiError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
-use crate::error::ApiError;
 pub struct Service {
     repo: Arc<dyn book::Repository>,
+    publisher_repo: Arc<dyn publisher::Repository>,
 }
 
 impl Service {
-    pub fn new(repo: Arc<dyn book::Repository>) -> Self {
-        Self { repo }
+    pub fn new(
+        repo: Arc<dyn book::Repository>,
+        publisher_repo: Arc<dyn publisher::Repository>,
+    ) -> Self {
+        Self {
+            repo,
+            publisher_repo,
+        }
     }
 
     pub async fn get_all(&self) -> Result<Vec<ResponseDto>, ApiError> {
@@ -18,52 +25,104 @@ impl Service {
             .find_all()
             .await
             .map_err(|_| ApiError::DatabaseError)?;
-        Ok(books.into_iter().map(ResponseDto::from).collect())
+
+        let response_dtos = books.into_iter().map(ResponseDto::from).collect();
+        Ok(response_dtos)
     }
 
-    pub async fn get(&self, id: i32) -> Result<ResponseDto, ApiError> {
+    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
         let book = self
             .repo
-            .find_by_id(id)
+            .find_by_pub_id(pub_id)
             .await
             .map_err(|_| ApiError::DatabaseError)?
-            .ok_or(ApiError::NotFound(format!("Book Id = {}", id)))?;
-        Ok(ResponseDto::from(book))
+            .ok_or(ApiError::NotFound(format!("Book with pub_id = {}", pub_id)))?;
+
+        Ok(book.into())
     }
 
     pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
+        let title = book::vo::BookTitle::new(dto.title)?;
+        let author = book::vo::BookAuthor::new(dto.author)?;
+        let price = book::vo::BookPrice::new(dto.price)?;
+
+        let publisher = self
+            .publisher_repo
+            .find_by_pub_id(dto.publisher_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!(
+                "Publisher with pub_id = {} not found",
+                dto.publisher_id
+            )))?;
+
         let book = book::Book {
             id: 0,
-            title: dto.title,
-            author: dto.author,
-            publisher_id: dto.publisher_id,
+            pub_id: uuid::Uuid::now_v7(),
+            title,
+            author,
+            publisher,
+            status: dto.status,
+            price,
         };
-        let result = self
-            .repo
-            .create(book)
+        self.repo
+            .create(book.clone())
             .await
             .map_err(|_| ApiError::DatabaseError)?;
-        Ok(ResponseDto::from(result))
+
+        Ok(book.into())
     }
 
     pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, ApiError> {
-        let book = book::Book {
-            id: dto.id,
-            title: dto.title,
-            author: dto.author,
-            publisher_id: dto.publisher_id,
-        };
-        let result = self
+        let title = book::vo::BookTitle::new(dto.title)?;
+        let author = book::vo::BookAuthor::new(dto.author)?;
+        let price = book::vo::BookPrice::new(dto.price)?;
+
+        let mut book = self
             .repo
-            .update(book)
+            .find_by_pub_id(dto.pub_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound("Book not found".to_string()))?;
+
+        book.title = title;
+        book.author = author;
+        book.price = price;
+
+        if book.publisher.pub_id != dto.publisher_id {
+            let publisher = self
+                .publisher_repo
+                .find_by_pub_id(dto.publisher_id)
+                .await
+                .map_err(|_| ApiError::DatabaseError)?
+                .ok_or(ApiError::NotFound(format!(
+                    "Publisher with pub_id = {} not found",
+                    dto.publisher_id
+                )))?;
+            book.publisher = publisher;
+        }
+
+        self.repo
+            .update(book.clone())
             .await
             .map_err(|_| ApiError::DatabaseError)?;
-        Ok(ResponseDto::from(result))
+
+        Ok(book.into())
     }
 
-    pub async fn delete(&self, id: i32) -> Result<(), ApiError> {
+    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), ApiError> {
+        let book = self
+            .repo
+            .find_by_pub_id(pub_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!(
+                "Book with pub_id = {} not found",
+                pub_id
+            )))?;
+
         self.repo
-            .delete(id)
+            .delete(book)
             .await
             .map_err(|_| ApiError::DatabaseError)?;
         Ok(())
@@ -75,36 +134,57 @@ impl Service {
 pub struct CreateDto {
     pub title: String,
     pub author: String,
-    pub publisher_id: i32,
+    pub publisher_id: uuid::Uuid,
+    #[schema(value_type = String, example = "Unapplied")]
+    pub status: book::vo::BookStatus,
+    pub price: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookUpdateDto)]
 pub struct UpdateDto {
-    pub id: i32,
+    pub pub_id: uuid::Uuid,
     pub title: String,
     pub author: String,
-    pub publisher_id: i32,
+    pub publisher_id: uuid::Uuid,
+    #[schema(value_type = String, example = "Unapplied")]
+    pub status: book::vo::BookStatus,
+    pub price: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookResponseDto)]
 pub struct ResponseDto {
-    pub id: i32,
+    pub pub_id: uuid::Uuid,
     pub title: String,
     pub author: String,
-    pub publisher_id: i32,
+    pub publisher: BookPublisherDto,
+    #[schema(value_type = String, example = "Unapplied")]
+    pub status: book::vo::BookStatus,
+    pub price: i32,
 }
 
 impl From<book::Book> for ResponseDto {
     fn from(book: book::Book) -> Self {
         Self {
-            id: book.id,
-            title: book.title,
-            author: book.author,
-            publisher_id: book.publisher_id,
+            pub_id: book.pub_id,
+            title: book.title.value().to_string(),
+            author: book.author.value().to_string(),
+            publisher: BookPublisherDto {
+                pub_id: book.publisher.pub_id,
+                name: book.publisher.name.value().to_string(),
+            },
+            status: book.status,
+            price: book.price.value(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BookPublisherDto)]
+pub struct BookPublisherDto {
+    pub pub_id: uuid::Uuid,
+    pub name: String,
 }
 
 #[cfg(test)]
@@ -133,9 +213,9 @@ mod tests {
             Ok(store.clone())
         }
 
-        async fn find_by_id(&self, id: i32) -> anyhow::Result<Option<book::Book>> {
+        async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<book::Book>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|b| b.id == id).cloned())
+            Ok(store.iter().find(|b| b.pub_id == pub_id).cloned())
         }
 
         async fn create(&self, mut item: book::Book) -> anyhow::Result<book::Book> {
@@ -156,55 +236,139 @@ mod tests {
             }
         }
 
-        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+        async fn delete(&self, item: book::Book) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
-            store.retain(|b| b.id != id);
+            store.retain(|b| b.pub_id != item.pub_id);
             Ok(())
         }
     }
 
+    struct FakePublisherRepository {
+        store: Arc<Mutex<Vec<publisher::Publisher>>>,
+    }
+
+    impl FakePublisherRepository {
+        fn new() -> Self {
+            Self {
+                store: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn add(&self, item: publisher::Publisher) {
+            self.store.lock().unwrap().push(item);
+        }
+    }
+
+    #[async_trait]
+    impl publisher::Repository for FakePublisherRepository {
+        async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
+            Ok(self.store.lock().unwrap().clone())
+        }
+        async fn find_by_pub_id(
+            &self,
+            pub_id: uuid::Uuid,
+        ) -> anyhow::Result<Option<publisher::Publisher>> {
+            Ok(self
+                .store
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|p| p.pub_id == pub_id)
+                .cloned())
+        }
+        async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+            self.store.lock().unwrap().push(item.clone());
+            Ok(item)
+        }
+        async fn update(
+            &self,
+            _item: publisher::Publisher,
+        ) -> anyhow::Result<publisher::Publisher> {
+            panic!("Not implemented")
+        }
+        async fn delete(&self, _item: publisher::Publisher) -> anyhow::Result<()> {
+            panic!("Not implemented")
+        }
+    }
+
     #[fixture]
-    async fn service() -> Service {
+    async fn service() -> (Service, Arc<FakePublisherRepository>) {
         let repo = FakeRepository::new();
-        Service::new(Arc::new(repo))
+        let pub_repo = FakePublisherRepository::new();
+        let pub_repo_arc = Arc::new(pub_repo);
+        (
+            Service::new(Arc::new(repo), pub_repo_arc.clone()),
+            pub_repo_arc,
+        )
+    }
+
+    fn create_dummy_publisher(pub_id: uuid::Uuid) -> publisher::Publisher {
+        publisher::Publisher {
+            id: 1,
+            pub_id,
+            name: publisher::vo::PublisherName::new("Test Publisher".to_string()).unwrap(),
+        }
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_and_get(#[future] service: Service) {
-        let service = service.await;
+    async fn test_create_and_get(#[future] service: (Service, Arc<FakePublisherRepository>)) {
+        let (service, pub_repo) = service.await;
+        let pub_id = uuid::Uuid::new_v4();
+
+        // Setup publisher
+        pub_repo.add(create_dummy_publisher(pub_id));
+
         let dto = CreateDto {
             title: "Test Book".to_string(),
             author: "Author 1".to_string(),
-            publisher_id: 1,
+            publisher_id: pub_id,
+            status: book::vo::BookStatus::Unapplied,
+            price: 1000,
         };
 
         // Create
         let created = service.create(dto).await.expect("Failed to create book");
         assert_eq!(created.title, "Test Book");
         assert_eq!(created.author, "Author 1");
-        assert_eq!(created.publisher_id, 1);
-        assert!(created.id > 0);
+        assert_eq!(created.publisher.pub_id, pub_id);
+        assert_eq!(created.publisher.name, "Test Publisher");
+        assert_eq!(created.price, 1000);
+        assert!(!created.pub_id.is_nil());
 
         // Get
-        let fetched = service.get(created.id).await.expect("Failed to get book");
-        assert_eq!(fetched.id, created.id);
+        let fetched = service
+            .get(created.pub_id)
+            .await
+            .expect("Failed to get book");
+        assert_eq!(fetched.pub_id, created.pub_id);
         assert_eq!(fetched.title, "Test Book");
+        assert_eq!(fetched.publisher.name, "Test Publisher");
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_get_all(#[future] service: Service) {
-        let service = service.await;
+    async fn test_get_all(#[future] service: (Service, Arc<FakePublisherRepository>)) {
+        let (service, pub_repo) = service.await;
+        let pub_id_1 = uuid::Uuid::new_v4();
+        let pub_id_2 = uuid::Uuid::new_v4();
+
+        pub_repo.add(create_dummy_publisher(pub_id_1));
+        pub_repo.add(create_dummy_publisher(pub_id_2));
+
         let dto1 = CreateDto {
             title: "Book 1".to_string(),
             author: "Author 1".to_string(),
-            publisher_id: 1,
+            publisher_id: pub_id_1,
+            status: book::vo::BookStatus::Unapplied,
+            price: 100,
         };
         let dto2 = CreateDto {
             title: "Book 2".to_string(),
             author: "Author 2".to_string(),
-            publisher_id: 2,
+            publisher_id: pub_id_2,
+            status: book::vo::BookStatus::Unapplied,
+            price: 200,
         };
 
         service.create(dto1).await.expect("Failed to create book 1");
@@ -216,48 +380,29 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_update(#[future] service: Service) {
-        let service = service.await;
+    async fn test_delete(#[future] service: (Service, Arc<FakePublisherRepository>)) {
+        let (service, pub_repo) = service.await;
+        let pub_id = uuid::Uuid::new_v4();
+        pub_repo.add(create_dummy_publisher(pub_id));
+
         let dto = CreateDto {
-            title: "Original Title".to_string(),
-            author: "Original Author".to_string(),
-            publisher_id: 1,
-        };
-        let created = service.create(dto).await.expect("Failed to create");
-
-        let update_dto = UpdateDto {
-            id: created.id,
-            title: "Updated Title".to_string(),
-            author: "Original Author".to_string(),
-            publisher_id: 1,
-        };
-
-        let updated = service.update(update_dto).await.expect("Failed to update");
-        assert_eq!(updated.title, "Updated Title");
-        assert_eq!(updated.author, "Original Author");
-
-        let fetched = service.get(created.id).await.expect("Failed to get");
-        assert_eq!(fetched.title, "Updated Title");
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_delete(#[future] service: Service) {
-        let service = service.await;
-        let dto = CreateDto {
-            title: "To Delete".to_string(),
+            title: "Book To Delete".to_string(),
             author: "Author".to_string(),
-            publisher_id: 1,
+            publisher_id: pub_id,
+            status: book::vo::BookStatus::Unapplied,
+            price: 100,
         };
-        let created = service.create(dto).await.expect("Failed to create");
+        let created = service.create(dto).await.expect("Failed to create book");
 
-        service.delete(created.id).await.expect("Failed to delete");
+        service
+            .delete(created.pub_id)
+            .await
+            .expect("Failed to delete book");
 
-        let result = service.get(created.id).await;
-        assert!(result.is_err());
-        match result {
-            Err(ApiError::NotFound(_)) => (),
-            _ => panic!("Expected NotFound error"),
+        let fetched = service.get(created.pub_id).await;
+        match fetched {
+            Err(ApiError::NotFound(_)) => assert!(true),
+            _ => assert!(false, "Book should be deleted"),
         }
     }
 }

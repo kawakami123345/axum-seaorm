@@ -25,19 +25,22 @@ pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 #[utoipa::path(
     get,
-    path = "/publishers/{id}",
+    path = "/publishers/{pub_id}",
     tag = "Publisher",
     operation_id = "get_publisher",
     responses(
-        (status = 200, description = "Get publisher by id", body = usecase::publisher::ResponseDto),
+        (status = 200, description = "Get publisher by pub_id", body = usecase::publisher::ResponseDto),
         (status = 404, description = "Publisher not found")
     ),
     params(
-        ("id" = i32, Path, description = "Publisher id")
+        ("pub_id" = uuid::Uuid, Path, description = "Publisher pub_id")
     )
 )]
-pub async fn get(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
-    match state.publisher_usecase.get(id).await {
+pub async fn get(
+    State(state): State<Arc<AppState>>,
+    Path(pub_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    match state.publisher_usecase.get(pub_id).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => e.into_response(),
     }
@@ -65,7 +68,7 @@ pub async fn create(
 
 #[utoipa::path(
     put,
-    path = "/publishers/{id}",
+    path = "/publishers/{pub_id}",
     tag = "Publisher",
     operation_id = "update_publisher",
     request_body = usecase::publisher::UpdateDto,
@@ -74,15 +77,15 @@ pub async fn create(
         (status = 404, description = "Publisher not found")
     ),
     params(
-        ("id" = i32, Path, description = "Publisher id")
+        ("pub_id" = uuid::Uuid, Path, description = "Publisher pub_id")
     )
 )]
 pub async fn update(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i32>,
+    Path(pub_id): Path<uuid::Uuid>,
     Json(mut payload): Json<usecase::publisher::UpdateDto>,
 ) -> impl IntoResponse {
-    payload.id = id;
+    payload.pub_id = pub_id;
     match state.publisher_usecase.update(payload).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => e.into_response(),
@@ -91,7 +94,7 @@ pub async fn update(
 
 #[utoipa::path(
     delete,
-    path = "/publishers/{id}",
+    path = "/publishers/{pub_id}",
     tag = "Publisher",
     operation_id = "delete_publisher",
     responses(
@@ -99,11 +102,14 @@ pub async fn update(
         (status = 404, description = "Publisher not found")
     ),
     params(
-        ("id" = i32, Path, description = "Publisher id")
+        ("pub_id" = uuid::Uuid, Path, description = "Publisher pub_id")
     )
 )]
-pub async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<i32>) -> impl IntoResponse {
-    match state.publisher_usecase.delete(id).await {
+pub async fn delete(
+    State(state): State<Arc<AppState>>,
+    Path(pub_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    match state.publisher_usecase.delete(pub_id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => e.into_response(),
     }
