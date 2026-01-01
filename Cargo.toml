@@ -19,6 +19,7 @@ dotenvy = { workspace = true }
 axum = { workspace = true }
 anyhow = { workspace = true }
 uuid = { workspace = true }
+migration = { workspace = true }
 
 [dev-dependencies]
 rstest = { workspace = true }
@@ -46,6 +47,7 @@ publisher = { path = "domain/publisher" }
 infra = { path = "infra" }
 usecase = { path = "usecase" }
 api = { path = "api" }
+migration = { path = "migration" }
 
 # Misc
 thiserror = "2"
@@ -57,3 +59,7 @@ utoipa-axum = "0.2.0"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 rstest = "0.26.1"
 uuid = { version = "1.19.0", features = ["serde", "v4", "v7"] }
+sea-orm-migration = { version = "2.0.0-rc", features = [
+    "runtime-tokio-rustls",
+    "sqlx-postgres",
+] }

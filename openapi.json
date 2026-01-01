@@ -60,7 +60,7 @@
         }
       }
     },
-    "/books/{id}": {
+    "/books/{pub_id}": {
       "get": {
         "tags": [
           "Book"
@@ -68,19 +68,19 @@
         "operationId": "get_book",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Book id",
+            "description": "Book pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Get book by id",
+            "description": "Get book by pub_id",
             "content": {
               "application/json": {
                 "schema": {
@@ -101,13 +101,13 @@
         "operationId": "update_book",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Book id",
+            "description": "Book pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -144,13 +144,13 @@
         "operationId": "delete_book",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Book id",
+            "description": "Book pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -215,7 +215,7 @@
         }
       }
     },
-    "/publishers/{id}": {
+    "/publishers/{pub_id}": {
       "get": {
         "tags": [
           "Publisher"
@@ -223,19 +223,19 @@
         "operationId": "get_publisher",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Publisher id",
+            "description": "Publisher pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Get publisher by id",
+            "description": "Get publisher by pub_id",
             "content": {
               "application/json": {
                 "schema": {
@@ -256,13 +256,13 @@
         "operationId": "update_publisher",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Publisher id",
+            "description": "Publisher pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -299,13 +299,13 @@
         "operationId": "delete_publisher",
         "parameters": [
           {
-            "name": "id",
+            "name": "pub_id",
             "in": "path",
-            "description": "Publisher id",
+            "description": "Publisher pub_id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -327,40 +327,75 @@
         "required": [
           "title",
           "author",
-          "publisher_id"
+          "publisher_id",
+          "status",
+          "price"
         ],
         "properties": {
           "author": {
             "type": "string"
           },
-          "publisher_id": {
+          "price": {
             "type": "integer",
             "format": "int32"
+          },
+          "publisher_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "example": "Unapplied"
           },
           "title": {
             "type": "string"
           }
         }
       },
+      "BookPublisherDto": {
+        "type": "object",
+        "required": [
+          "pub_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "BookResponseDto": {
         "type": "object",
         "required": [
-          "id",
+          "pub_id",
           "title",
           "author",
-          "publisher_id"
+          "publisher",
+          "status",
+          "price"
         ],
         "properties": {
           "author": {
             "type": "string"
           },
-          "id": {
+          "price": {
             "type": "integer",
             "format": "int32"
           },
-          "publisher_id": {
-            "type": "integer",
-            "format": "int32"
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "publisher": {
+            "$ref": "#/components/schemas/BookPublisherDto"
+          },
+          "status": {
+            "type": "string",
+            "example": "Unapplied"
           },
           "title": {
             "type": "string"
@@ -370,22 +405,32 @@
       "BookUpdateDto": {
         "type": "object",
         "required": [
-          "id",
+          "pub_id",
           "title",
           "author",
-          "publisher_id"
+          "publisher_id",
+          "status",
+          "price"
         ],
         "properties": {
           "author": {
             "type": "string"
           },
-          "id": {
+          "price": {
             "type": "integer",
             "format": "int32"
           },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "publisher_id": {
-            "type": "integer",
-            "format": "int32"
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "example": "Unapplied"
           },
           "title": {
             "type": "string"
@@ -406,32 +451,32 @@
       "PublisherResponseDto": {
         "type": "object",
         "required": [
-          "id",
+          "pub_id",
           "name"
         ],
         "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int32"
-          },
           "name": {
             "type": "string"
+          },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
       "PublisherUpdateDto": {
         "type": "object",
         "required": [
-          "id",
+          "pub_id",
           "name"
         ],
         "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int32"
-          },
           "name": {
             "type": "string"
+          },
+          "pub_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       }

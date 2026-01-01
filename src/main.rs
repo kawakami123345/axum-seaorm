@@ -1,4 +1,5 @@
 use api::{AppState, create_router};
+use migration::{Migrator, MigratorTrait};
 use sea_orm::Database;
 use std::sync::Arc;
 mod test;
@@ -11,9 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(db_url).await?;
 
-    // 2. Setup Schema (Automated via infra)
-    #[cfg(debug_assertions)]
-    infra::init_db(&db).await?;
+    // 2. Run Migrations
+    Migrator::up(&db, None).await?;
 
     // 3. Dependency Injection
     let book_repo =
