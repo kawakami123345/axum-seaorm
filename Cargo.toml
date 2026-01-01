@@ -63,3 +63,4 @@ sea-orm-migration = { version = "2.0.0-rc", features = [
     "runtime-tokio-rustls",
     "sqlx-postgres",
 ] }
+chrono = { version = "0.4", features = ["serde"] }

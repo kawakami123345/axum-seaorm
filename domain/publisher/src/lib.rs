@@ -18,6 +18,40 @@ pub struct Publisher {
     pub id: i32,
     pub pub_id: uuid::Uuid,
     pub name: vo::PublisherName,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: String,
+    pub updated_by: String,
+}
+
+impl Publisher {
+    pub fn new(pub_id: uuid::Uuid, name: vo::PublisherName, created_by: String) -> Self {
+        let now = chrono::Utc::now();
+        Self {
+            id: 0,
+            pub_id,
+            name,
+            created_at: now,
+            updated_at: now,
+            created_by: created_by.clone(),
+            updated_by: created_by,
+        }
+    }
+
+    fn update_audit(&mut self, updated_by: String) {
+        self.updated_at = chrono::Utc::now();
+        self.updated_by = updated_by;
+    }
+
+    pub fn update(
+        &mut self,
+        name: vo::PublisherName,
+        updated_by: String,
+    ) -> Result<(), DomainError> {
+        self.name = name;
+        self.update_audit(updated_by);
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]

@@ -9,7 +9,12 @@ pub struct Model {
     pub id: i32,
     #[sea_orm(unique)]
     pub pub_id: uuid::Uuid,
+    #[sea_orm(unique)]
     pub name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: String,
+    pub updated_by: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -42,6 +47,10 @@ impl SqlRepository {
             id: model.id,
             pub_id: model.pub_id,
             name,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+            created_by: model.created_by,
+            updated_by: model.updated_by,
         })
     }
 }
@@ -71,6 +80,10 @@ impl publisher::Repository for SqlRepository {
         let active_model = ActiveModel {
             pub_id: Set(item.pub_id),
             name: Set(item.name.value().to_string()),
+            created_at: Set(item.created_at),
+            updated_at: Set(item.updated_at),
+            created_by: Set(item.created_by),
+            updated_by: Set(item.updated_by),
             ..Default::default()
         };
 
@@ -83,6 +96,10 @@ impl publisher::Repository for SqlRepository {
             id: Set(item.id),
             pub_id: Set(item.pub_id),
             name: Set(item.name.value().to_string()),
+            created_at: Set(item.created_at),
+            updated_at: Set(item.updated_at),
+            created_by: Set(item.created_by),
+            updated_by: Set(item.updated_by),
         };
 
         let result = active_model.update(&self.db).await?;

@@ -36,11 +36,8 @@ impl Service {
 
     pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, ApiError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
-        let publisher = publisher::Publisher {
-            id: 0,
-            pub_id: uuid::Uuid::now_v7(),
-            name,
-        };
+        let publisher =
+            publisher::Publisher::new(uuid::Uuid::now_v7(), name, "test player".to_string());
         let result = self
             .repo
             .create(publisher)
@@ -61,7 +58,9 @@ impl Service {
                 dto.pub_id
             )))?;
 
-        publisher.name = name;
+        publisher
+            .update(name, "test player".to_string())
+            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
 
         let result = self
             .repo

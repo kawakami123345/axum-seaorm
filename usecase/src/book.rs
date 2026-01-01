@@ -56,15 +56,14 @@ impl Service {
                 dto.publisher_id
             )))?;
 
-        let book = book::Book {
-            id: 0,
-            pub_id: uuid::Uuid::now_v7(),
+        let book = book::Book::new(
+            uuid::Uuid::now_v7(),
             title,
             author,
             publisher,
-            status: dto.status,
             price,
-        };
+            "test player".to_string(),
+        );
         self.repo
             .create(book.clone())
             .await
@@ -85,10 +84,6 @@ impl Service {
             .map_err(|_| ApiError::DatabaseError)?
             .ok_or(ApiError::NotFound("Book not found".to_string()))?;
 
-        book.title = title;
-        book.author = author;
-        book.price = price;
-
         if book.publisher.pub_id != dto.publisher_id {
             let publisher = self
                 .publisher_repo
@@ -99,7 +94,17 @@ impl Service {
                     "Publisher with pub_id = {} not found",
                     dto.publisher_id
                 )))?;
-            book.publisher = publisher;
+            book.update(title, author, publisher, price, "test player".to_string())
+                .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+        } else {
+            book.update(
+                title,
+                author,
+                book.publisher.clone(),
+                price,
+                "test player".to_string(),
+            )
+            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
         }
 
         self.repo
@@ -126,6 +131,27 @@ impl Service {
             .await
             .map_err(|_| ApiError::DatabaseError)?;
         Ok(())
+    }
+    pub async fn switch_status(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, ApiError> {
+        let mut book = self
+            .repo
+            .find_by_pub_id(pub_id)
+            .await
+            .map_err(|_| ApiError::DatabaseError)?
+            .ok_or(ApiError::NotFound(format!(
+                "Book with pub_id = {} not found",
+                pub_id
+            )))?;
+
+        book.switch_status("test player".to_string())
+            .map_err(|e| ApiError::DomainRuleViolation(e.to_string()))?;
+
+        self.repo
+            .update(book.clone())
+            .await
+            .map_err(|_| ApiError::DatabaseError)?;
+
+        Ok(book.into())
     }
 }
 
@@ -307,6 +333,10 @@ mod tests {
             id: 1,
             pub_id,
             name: publisher::vo::PublisherName::new("Test Publisher".to_string()).unwrap(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            created_by: "test player".to_string(),
+            updated_by: "test player".to_string(),
         }
     }
 

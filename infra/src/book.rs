@@ -14,6 +14,10 @@ pub struct Model {
     pub publisher_id: i32,
     pub status: String,
     pub price: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: String,
+    pub updated_by: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -65,6 +69,10 @@ impl SqlRepository {
                 pub_id: p.pub_id,
                 name: publisher::vo::PublisherName::new(p.name)
                     .map_err(|e| anyhow::anyhow!("Invalid publisher name in DB: {}", e))?,
+                created_at: p.created_at,
+                updated_at: p.updated_at,
+                created_by: p.created_by,
+                updated_by: p.updated_by,
             }
         } else {
             return Err(anyhow::anyhow!("Publisher not found for book {}", model.id));
@@ -78,6 +86,10 @@ impl SqlRepository {
             publisher: publisher_entity,
             status,
             price,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+            created_by: model.created_by,
+            updated_by: model.updated_by,
         })
     }
 }
@@ -125,6 +137,10 @@ impl book::Repository for SqlRepository {
             publisher_id: Set(publisher.id),
             status: Set(item.status.value().to_string()),
             price: Set(item.price.value()),
+            created_at: Set(item.created_at),
+            updated_at: Set(item.updated_at),
+            created_by: Set(item.created_by),
+            updated_by: Set(item.updated_by),
             ..Default::default()
         };
 
@@ -149,6 +165,10 @@ impl book::Repository for SqlRepository {
             publisher_id: Set(publisher.id),
             status: Set(item.status.value().to_string()),
             price: Set(item.price.value()),
+            created_at: Set(item.created_at),
+            updated_at: Set(item.updated_at),
+            created_by: Set(item.created_by),
+            updated_by: Set(item.updated_by),
         };
 
         let result = active_model.update(&self.db).await?;

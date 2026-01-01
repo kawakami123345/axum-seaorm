@@ -9,6 +9,8 @@ pub enum ApiError {
     InternalServerError,
     #[error("Database execution failed")]
     DatabaseError,
+    #[error("Domain rule violation: {0}")]
+    DomainRuleViolation(String),
     #[error("Domain error occurred: {0}")]
     BookDomainError(#[from] book::DomainError),
     #[error("Domain error occurred: {0}")]
@@ -22,9 +24,9 @@ impl IntoResponse for ApiError {
             ApiError::InternalServerError | ApiError::DatabaseError => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ApiError::BookDomainError(_) | ApiError::PublisherDomainError(_) => {
-                StatusCode::BAD_REQUEST
-            }
+            ApiError::BookDomainError(_)
+            | ApiError::PublisherDomainError(_)
+            | ApiError::DomainRuleViolation(_) => StatusCode::BAD_REQUEST,
         }
         .into_response()
     }
