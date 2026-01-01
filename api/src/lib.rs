@@ -19,12 +19,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         // routes!はPath毎に分ける必要あり
         .routes(routes!(book::get_all, book::create))
-        .routes(routes!(
-            book::get,
-            book::update,
-            book::delete,
-            book::switch_status
-        ))
+        .routes(routes!(book::get, book::update, book::delete))
+        .routes(routes!(book::switch_status))
         .routes(routes!(publisher::get_all, publisher::create))
         .routes(routes!(
             publisher::get,
