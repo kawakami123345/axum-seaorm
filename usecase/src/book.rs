@@ -72,14 +72,18 @@ impl Service {
         Ok(book.into())
     }
 
-    pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, ApiError> {
+    pub async fn update(
+        &self,
+        pub_id: uuid::Uuid,
+        dto: UpdateDto,
+    ) -> Result<ResponseDto, ApiError> {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
 
         let mut book = self
             .repo
-            .find_by_pub_id(dto.pub_id)
+            .find_by_pub_id(pub_id)
             .await
             .map_err(|_| ApiError::DatabaseError)?
             .ok_or(ApiError::NotFound("Book not found".to_string()))?;
@@ -162,19 +166,16 @@ pub struct CreateDto {
     pub author: String,
     pub publisher_id: uuid::Uuid,
     #[schema(value_type = String, example = "Unapplied")]
-    pub status: book::vo::BookStatus,
     pub price: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookUpdateDto)]
 pub struct UpdateDto {
-    pub pub_id: uuid::Uuid,
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
     #[schema(value_type = String, example = "Unapplied")]
-    pub status: book::vo::BookStatus,
     pub price: i32,
 }
 
@@ -353,7 +354,6 @@ mod tests {
             title: "Test Book".to_string(),
             author: "Author 1".to_string(),
             publisher_id: pub_id,
-            status: book::vo::BookStatus::Unapplied,
             price: 1000,
         };
 
@@ -390,14 +390,12 @@ mod tests {
             title: "Book 1".to_string(),
             author: "Author 1".to_string(),
             publisher_id: pub_id_1,
-            status: book::vo::BookStatus::Unapplied,
             price: 100,
         };
         let dto2 = CreateDto {
             title: "Book 2".to_string(),
             author: "Author 2".to_string(),
             publisher_id: pub_id_2,
-            status: book::vo::BookStatus::Unapplied,
             price: 200,
         };
 
@@ -419,7 +417,6 @@ mod tests {
             title: "Book To Delete".to_string(),
             author: "Author".to_string(),
             publisher_id: pub_id,
-            status: book::vo::BookStatus::Unapplied,
             price: 100,
         };
         let created = service.create(dto).await.expect("Failed to create book");

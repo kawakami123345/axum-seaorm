@@ -46,16 +46,20 @@ impl Service {
         Ok(result.into())
     }
 
-    pub async fn update(&self, dto: UpdateDto) -> Result<ResponseDto, ApiError> {
+    pub async fn update(
+        &self,
+        pub_id: uuid::Uuid,
+        dto: UpdateDto,
+    ) -> Result<ResponseDto, ApiError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let mut publisher = self
             .repo
-            .find_by_pub_id(dto.pub_id)
+            .find_by_pub_id(pub_id)
             .await
             .map_err(|_| ApiError::DatabaseError)?
             .ok_or(ApiError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
-                dto.pub_id
+                pub_id
             )))?;
 
         publisher
@@ -98,7 +102,6 @@ pub struct CreateDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PublisherUpdateDto)]
 pub struct UpdateDto {
-    pub pub_id: uuid::Uuid,
     pub name: String,
 }
 
@@ -230,11 +233,13 @@ mod tests {
         let created = service.create(dto).await.expect("Failed to create");
 
         let update_dto = UpdateDto {
-            pub_id: created.pub_id,
             name: "Updated Name".to_string(),
         };
 
-        let updated = service.update(update_dto).await.expect("Failed to update");
+        let updated = service
+            .update(created.pub_id, update_dto)
+            .await
+            .expect("Failed to update");
         assert_eq!(updated.name, "Updated Name");
 
         let fetched = service.get(created.pub_id).await.expect("Failed to get");

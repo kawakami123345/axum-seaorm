@@ -83,10 +83,9 @@ pub async fn create(
 pub async fn update(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
-    Json(mut payload): Json<usecase::publisher::UpdateDto>,
+    Json(payload): Json<usecase::publisher::UpdateDto>,
 ) -> impl IntoResponse {
-    payload.pub_id = pub_id;
-    match state.publisher_usecase.update(payload).await {
+    match state.publisher_usecase.update(pub_id, payload).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => e.into_response(),
     }
