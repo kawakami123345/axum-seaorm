@@ -7,6 +7,7 @@ mod test;
 async fn main() -> anyhow::Result<()> {
     // 0. Load .env
     dotenvy::dotenv().ok();
+    tracing_subscriber::fmt::init();
 
     // 1. Database Connection
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");

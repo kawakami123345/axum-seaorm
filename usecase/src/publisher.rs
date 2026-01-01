@@ -115,8 +115,8 @@ pub struct ResponseDto {
 impl From<publisher::Publisher> for ResponseDto {
     fn from(publisher: publisher::Publisher) -> Self {
         Self {
-            pub_id: *publisher.pub_id(),
-            name: publisher.name().value().to_string(),
+            pub_id: publisher.pub_id(),
+            name: publisher.name(),
         }
     }
 }
@@ -152,7 +152,7 @@ mod tests {
             pub_id: uuid::Uuid,
         ) -> anyhow::Result<Option<publisher::Publisher>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|p| p.pub_id() == &pub_id).cloned())
+            Ok(store.iter().find(|p| p.pub_id() == pub_id).cloned())
         }
 
         async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
@@ -161,12 +161,12 @@ mod tests {
 
             let new_publisher = publisher::Publisher::reconstruct(
                 new_id,
-                *item.pub_id(),
-                item.name().clone(),
-                *item.created_at(),
-                *item.updated_at(),
-                item.created_by().to_string(),
-                item.updated_by().to_string(),
+                item.pub_id(),
+                publisher::vo::PublisherName::new(item.name()).unwrap(),
+                item.created_at(),
+                item.updated_at(),
+                item.created_by(),
+                item.updated_by(),
             );
 
             store.push(new_publisher.clone());

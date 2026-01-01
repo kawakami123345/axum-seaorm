@@ -91,7 +91,7 @@ impl Service {
             .map_err(|_| UseCaseError::DatabaseError)?
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        if book.publisher().pub_id() != &dto.publisher_id {
+        if book.publisher().pub_id() != dto.publisher_id {
             let publisher = self
                 .publisher_repo
                 .find_by_pub_id(dto.publisher_id)
@@ -107,7 +107,7 @@ impl Service {
             book.update(
                 title,
                 author,
-                book.publisher().clone(),
+                book.publisher(),
                 price,
                 "test player".to_string(),
             )
@@ -188,22 +188,22 @@ pub struct ResponseDto {
     pub author: String,
     pub publisher: BookPublisherDto,
     #[schema(value_type = String, example = "Unapplied")]
-    pub status: book::vo::BookStatus,
+    pub status: String,
     pub price: i32,
 }
 
 impl From<book::Book> for ResponseDto {
     fn from(book: book::Book) -> Self {
         Self {
-            pub_id: *book.pub_id(),
-            title: book.title().value().to_string(),
-            author: book.author().value().to_string(),
+            pub_id: book.pub_id(),
+            title: book.title(),
+            author: book.author(),
             publisher: BookPublisherDto {
-                pub_id: *book.publisher().pub_id(),
-                name: book.publisher().name().value().to_string(),
+                pub_id: book.publisher().pub_id(),
+                name: book.publisher().name(),
             },
-            status: *book.status(),
-            price: book.price().value(),
+            status: book.status(),
+            price: book.price(),
         }
     }
 }
@@ -243,7 +243,7 @@ mod tests {
 
         async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<book::Book>> {
             let store = self.store.lock().unwrap();
-            Ok(store.iter().find(|b| b.pub_id() == &pub_id).cloned())
+            Ok(store.iter().find(|b| b.pub_id() == pub_id).cloned())
         }
 
         async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
@@ -253,16 +253,19 @@ mod tests {
             // We need to reconstruct to set the ID, since fields are private
             let new_book = book::Book::reconstruct(
                 new_id,
-                *item.pub_id(),
-                item.title().clone(),
-                item.author().clone(),
-                item.publisher().clone(),
-                *item.status(),
-                *item.price(),
-                *item.created_at(),
-                *item.updated_at(),
-                item.created_by().to_string(),
-                item.updated_by().to_string(),
+                item.pub_id(),
+                book::vo::BookTitle::new(item.title()).unwrap(),
+                book::vo::BookAuthor::new(item.author()).unwrap(),
+                item.publisher(),
+                match item.status().as_str() {
+                    "Applied" => book::vo::BookStatus::Applied,
+                    _ => book::vo::BookStatus::Unapplied,
+                },
+                book::vo::BookPrice::new(item.price()).unwrap(),
+                item.created_at(),
+                item.updated_at(),
+                item.created_by(),
+                item.updated_by(),
             );
 
             store.push(new_book.clone());
@@ -316,7 +319,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .find(|p| p.pub_id() == &pub_id)
+                .find(|p| p.pub_id() == pub_id)
                 .cloned())
         }
         async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {

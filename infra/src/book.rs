@@ -122,63 +122,52 @@ impl book::Repository for SqlRepository {
     }
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let publisher = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(*item.publisher().pub_id()))
+        let publisher_model = super::publisher::Entity::find()
+            .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
             .one(&self.db)
             .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Publisher with UUID {} not found",
-                    item.publisher().pub_id()
-                )
-            })?;
+            .ok_or(anyhow::anyhow!("Publisher not found"))?;
 
         let active_model = ActiveModel {
-            pub_id: Set(*item.pub_id()),
-            title: Set(item.title().value().to_string()),
-            author: Set(item.author().value().to_string()),
-            publisher_id: Set(publisher.id),
-            status: Set(item.status().value().to_string()),
-            price: Set(item.price().value()),
-            created_at: Set(*item.created_at()),
-            updated_at: Set(*item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            pub_id: Set(item.pub_id()),
+            publisher_id: Set(publisher_model.id),
+            title: Set(item.title()),
+            author: Set(item.author()),
+            price: Set(item.price()),
+            status: Set(item.status()),
+            created_at: Set(item.created_at()),
+            updated_at: Set(item.updated_at()),
+            created_by: Set(item.created_by()),
+            updated_by: Set(item.updated_by()),
             ..Default::default()
         };
-
         let result = active_model.insert(&self.db).await?;
-        Self::to_domain(result, Some(publisher))
+        Ok(Self::to_domain(result, Some(publisher_model))?)
     }
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let publisher = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(*item.publisher().pub_id()))
+        let publisher_model = super::publisher::Entity::find()
+            .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
             .one(&self.db)
             .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Publisher with UUID {} not found",
-                    item.publisher().pub_id()
-                )
-            })?;
+            .ok_or(anyhow::anyhow!("Publisher not found"))?;
 
         let active_model = ActiveModel {
             id: Set(item.id()),
-            pub_id: Set(*item.pub_id()),
-            title: Set(item.title().value().to_string()),
-            author: Set(item.author().value().to_string()),
-            publisher_id: Set(publisher.id),
-            status: Set(item.status().value().to_string()),
-            price: Set(item.price().value()),
-            created_at: Set(*item.created_at()),
-            updated_at: Set(*item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            pub_id: Set(item.pub_id()),
+            publisher_id: Set(publisher_model.id),
+            title: Set(item.title()),
+            author: Set(item.author()),
+            price: Set(item.price()),
+            status: Set(item.status()),
+            created_at: Set(item.created_at()),
+            updated_at: Set(item.updated_at()),
+            created_by: Set(item.created_by()),
+            updated_by: Set(item.updated_by()),
         };
-
         let result = active_model.update(&self.db).await?;
-        Self::to_domain(result, Some(publisher))
+
+        Ok(Self::to_domain(result, Some(publisher_model))?)
     }
 
     async fn delete(&self, item: book::Book) -> anyhow::Result<()> {

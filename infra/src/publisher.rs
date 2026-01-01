@@ -78,32 +78,32 @@ impl publisher::Repository for SqlRepository {
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
-            pub_id: Set(*item.pub_id()),
-            name: Set(item.name().value().to_string()),
-            created_at: Set(*item.created_at()),
-            updated_at: Set(*item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            pub_id: Set(item.pub_id()),
+            name: Set(item.name()),
+            created_at: Set(item.created_at()),
+            updated_at: Set(item.updated_at()),
+            created_by: Set(item.created_by()),
+            updated_by: Set(item.updated_by()),
             ..Default::default()
         };
 
         let result = active_model.insert(&self.db).await?;
-        Self::to_domain(result)
+        Ok(Self::to_domain(result)?)
     }
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let active_model = ActiveModel {
             id: Set(item.id()),
-            pub_id: Set(*item.pub_id()),
-            name: Set(item.name().value().to_string()),
-            created_at: Set(*item.created_at()),
-            updated_at: Set(*item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            pub_id: Set(item.pub_id()),
+            name: Set(item.name()),
+            created_at: Set(item.created_at()),
+            updated_at: Set(item.updated_at()),
+            created_by: Set(item.created_by()),
+            updated_by: Set(item.updated_by()),
         };
 
         let result = active_model.update(&self.db).await?;
-        Self::to_domain(result)
+        Ok(Self::to_domain(result)?)
     }
 
     async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {

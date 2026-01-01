@@ -20,6 +20,7 @@ axum = { workspace = true }
 anyhow = { workspace = true }
 uuid = { workspace = true }
 migration = { workspace = true }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [dev-dependencies]
 rstest = { workspace = true }

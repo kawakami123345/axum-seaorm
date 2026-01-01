@@ -9,6 +9,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
+#[openapi(info(title = "Rust Web App", version = "0.1.0"))]
 pub struct ApiDoc;
 
 pub struct AppState {

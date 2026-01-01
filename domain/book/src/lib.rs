@@ -85,35 +85,35 @@ impl Book {
     pub fn id(&self) -> i32 {
         self.id
     }
-    pub fn pub_id(&self) -> &uuid::Uuid {
-        &self.pub_id
+    pub fn pub_id(&self) -> uuid::Uuid {
+        self.pub_id
     }
-    pub fn title(&self) -> &vo::BookTitle {
-        &self.title
+    pub fn title(&self) -> String {
+        self.title.value().to_string()
     }
-    pub fn author(&self) -> &vo::BookAuthor {
-        &self.author
+    pub fn author(&self) -> String {
+        self.author.value().to_string()
     }
-    pub fn publisher(&self) -> &publisher::Publisher {
-        &self.publisher
+    pub fn publisher(&self) -> publisher::Publisher {
+        self.publisher.clone()
     }
-    pub fn status(&self) -> &vo::BookStatus {
-        &self.status
+    pub fn status(&self) -> String {
+        self.status.value().to_string()
     }
-    pub fn price(&self) -> &vo::BookPrice {
-        &self.price
+    pub fn price(&self) -> i32 {
+        self.price.value()
     }
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.created_at
+    pub fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.created_at
     }
-    pub fn updated_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.updated_at
+    pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.updated_at
     }
-    pub fn created_by(&self) -> &str {
-        &self.created_by
+    pub fn created_by(&self) -> String {
+        self.created_by.clone()
     }
-    pub fn updated_by(&self) -> &str {
-        &self.updated_by
+    pub fn updated_by(&self) -> String {
+        self.updated_by.clone()
     }
 
     fn update_audit(&mut self, updated_by: String) {
