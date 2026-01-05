@@ -1,4 +1,5 @@
 use crate::error::UseCaseError;
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -30,6 +31,31 @@ impl Service {
             .map_err(|_| UseCaseError::DatabaseError)?;
 
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
+        Ok(response_dtos)
+    }
+
+    pub async fn get_year_applied_books(
+        &self,
+        year: i32,
+    ) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let books = self
+            .repo
+            .find_all()
+            .await
+            .map_err(|_| UseCaseError::DatabaseError)?;
+
+        let response_dtos = books
+            .into_iter()
+            .filter(|b| {
+                if let Some(applied_at) = b.applied_at() {
+                    applied_at.year() == year
+                } else {
+                    false
+                }
+            })
+            .map(ResponseDto::from)
+            .collect();
+
         Ok(response_dtos)
     }
 

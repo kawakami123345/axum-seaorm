@@ -25,14 +25,16 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(infra::shop::SqlRepository::new(db.clone())) as Arc<dyn shop::Repository>;
 
     let book_usecase =
-        usecase::book::Service::new(book_repo, publisher_repo.clone(), shop_repo.clone());
+        usecase::book::Service::new(book_repo.clone(), publisher_repo.clone(), shop_repo.clone());
     let publisher_usecase = usecase::publisher::Service::new(publisher_repo);
     let shop_usecase = usecase::shop::Service::new(shop_repo);
+    let dashboard_usecase = usecase::dashboard::Service::new(book_repo.clone());
 
     let state = Arc::new(AppState {
         book_usecase,
         publisher_usecase,
         shop_usecase,
+        dashboard_usecase,
     });
 
     // 4. Start Server

@@ -60,6 +60,41 @@
         }
       }
     },
+    "/books/applied/{year}": {
+      "get": {
+        "tags": [
+          "Book"
+        ],
+        "operationId": "get_year_applied_books",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "description": "Target year",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List applied books by year",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BookResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/books/{pub_id}": {
       "get": {
         "tags": [
@@ -205,6 +240,29 @@
           },
           "404": {
             "description": "Book not found"
+          }
+        }
+      }
+    },
+    "/dashboard/annual-summary": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "get_annual_summary",
+        "responses": {
+          "200": {
+            "description": "Annual summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DashboardDto"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -707,6 +765,43 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "DashboardDto": {
+        "type": "object",
+        "required": [
+          "year",
+          "limit",
+          "total_amount",
+          "balance",
+          "count",
+          "average"
+        ],
+        "properties": {
+          "average": {
+            "type": "number",
+            "format": "double"
+          },
+          "balance": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

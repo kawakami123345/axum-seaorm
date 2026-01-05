@@ -139,3 +139,24 @@ pub async fn change_applied_at(
         Err(e) => AppError(e).into_response(),
     }
 }
+#[utoipa::path(
+    get,
+    path = "/books/applied/{year}",
+    tag = "Book",
+    operation_id = "get_year_applied_books",
+    responses(
+        (status = 200, description = "List applied books by year", body = [usecase::book::ResponseDto])
+    ),
+    params(
+        ("year" = i32, Path, description = "Target year")
+    )
+)]
+pub async fn get_year_applied_books(
+    State(state): State<Arc<AppState>>,
+    Path(year): Path<i32>,
+) -> impl IntoResponse {
+    match state.book_usecase.get_year_applied_books(year).await {
+        Ok(books) => (StatusCode::OK, Json(books)).into_response(),
+        Err(e) => AppError(e).into_response(),
+    }
+}

@@ -1,4 +1,5 @@
 pub mod book;
+pub mod dashboard;
 pub mod error;
 pub mod publisher;
 pub mod shop;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub book_usecase: usecase::book::Service,
     pub publisher_usecase: usecase::publisher::Service,
     pub shop_usecase: usecase::shop::Service,
+    pub dashboard_usecase: usecase::dashboard::Service,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -25,6 +27,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .routes(routes!(book::get_all, book::create))
         .routes(routes!(book::get, book::update, book::delete))
         .routes(routes!(book::change_applied_at))
+        .routes(routes!(book::get_year_applied_books))
         .routes(routes!(publisher::get_all, publisher::create))
         .routes(routes!(
             publisher::get,
@@ -37,6 +40,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             shop::update_shop,
             shop::delete_shop
         ))
+        .routes(routes!(dashboard::get_annual_summary))
         .split_for_parts();
 
     #[cfg(debug_assertions)]

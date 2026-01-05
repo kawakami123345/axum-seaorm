@@ -1,8 +1,8 @@
-export default {
-    'bookkeeper-api': {
+module.exports = {
+    bookkeeper: {
         input: {
             target: '../openapi.json',
-            validation: false
+            validation: false,
         },
         output: {
             mode: 'tags-split',
@@ -10,7 +10,7 @@ export default {
             schemas: 'src/api/model',
             client: 'react-query',
             httpClient: 'fetch',
+            baseUrl: '/api',
         },
     },
 };
-
