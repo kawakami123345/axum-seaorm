@@ -29,6 +29,8 @@ pub struct Model {
     pub created_by: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub updated_by: String,
+    #[sea_orm(column_type = "Text")]
+    pub user_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -59,6 +61,7 @@ mod tests {
                 updated_at,
                 created_by,
                 updated_by,
+                user_id,
             } = book;
 
             let Model {
@@ -78,6 +81,7 @@ mod tests {
                 updated_at: _,
                 created_by: _,
                 updated_by: _,
+                user_id: _,
             } = history;
 
             // コンパイルエラーを防ぐために変数を使用
@@ -95,6 +99,7 @@ mod tests {
                 updated_at,
                 created_by,
                 updated_by,
+                user_id,
             );
         }
     }

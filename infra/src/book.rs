@@ -26,6 +26,8 @@ pub struct Model {
     pub created_by: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub updated_by: String,
+    #[sea_orm(column_type = "Text")]
+    pub user_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -128,6 +130,7 @@ impl SqlRepository {
             model.updated_at,
             model.created_by,
             model.updated_by,
+            model.user_id,
         ))
     }
 }
@@ -209,6 +212,7 @@ impl book::Repository for SqlRepository {
             updated_at: Set(item.updated_at()),
             created_by: Set(item.created_by()),
             updated_by: Set(item.updated_by()),
+            user_id: Set(item.user_id()),
             ..Default::default()
         };
         let result = active_model.insert(&self.db).await?;
@@ -248,6 +252,7 @@ impl book::Repository for SqlRepository {
             updated_at: Set(item.updated_at()),
             created_by: Set(item.created_by()),
             updated_by: Set(item.updated_by()),
+            user_id: Set(item.user_id()),
         };
         let result = active_model.update(&self.db).await?;
 

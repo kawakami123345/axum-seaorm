@@ -116,6 +116,7 @@ impl Service {
             format,
             price,
             "test player".to_string(),
+            "test player".to_string(),
         );
         self.repo
             .create(book.clone())
@@ -368,6 +369,7 @@ mod tests {
                 item.updated_at(),
                 item.created_by(),
                 item.updated_by(),
+                item.user_id(),
             );
 
             store.push(new_book.clone());

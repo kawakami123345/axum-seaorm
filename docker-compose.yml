@@ -11,5 +11,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  kanidm:
+    image: kanidm/server:latest
+    container_name: kanidm
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - kanidm_data:/data
+
 volumes:
   postgres_data:
+  kanidm_data:

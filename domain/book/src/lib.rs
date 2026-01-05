@@ -28,6 +28,7 @@ pub struct Book {
     updated_at: chrono::DateTime<chrono::Utc>,
     created_by: String,
     updated_by: String,
+    user_id: String,
 }
 
 impl Book {
@@ -41,6 +42,7 @@ impl Book {
         format: vo::BookFormat,
         price: vo::BookPrice,
         created_by: String,
+        user_id: String,
     ) -> Self {
         let now = chrono::Utc::now();
         Self {
@@ -57,6 +59,7 @@ impl Book {
             updated_at: now,
             created_by: created_by.clone(),
             updated_by: created_by,
+            user_id,
         }
     }
 
@@ -75,6 +78,7 @@ impl Book {
         updated_at: chrono::DateTime<chrono::Utc>,
         created_by: String,
         updated_by: String,
+        user_id: String,
     ) -> Self {
         Self {
             id,
@@ -90,6 +94,7 @@ impl Book {
             updated_at,
             created_by,
             updated_by,
+            user_id,
         }
     }
 
@@ -131,6 +136,9 @@ impl Book {
     }
     pub fn updated_by(&self) -> String {
         self.updated_by.clone()
+    }
+    pub fn user_id(&self) -> String {
+        self.user_id.clone()
     }
 
     fn update_audit(&mut self, updated_by: String) {
