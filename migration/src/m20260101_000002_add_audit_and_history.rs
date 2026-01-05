@@ -25,40 +25,22 @@ impl MigrationTrait for Migration {
             CREATE OR REPLACE FUNCTION save_history_book() RETURNS TRIGGER AS $$
             BEGIN
                 IF (TG_OP = 'DELETE') THEN
-                    INSERT INTO book_history (
-                        id, pub_id, title, author, publisher_id, status, price,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        OLD.id, OLD.pub_id, OLD.title, OLD.author, OLD.publisher_id, OLD.status, OLD.price,
-                        OLD.created_at, OLD.updated_at, OLD.created_by, OLD.updated_by,
-                        'DELETE', NOW()
-                    );
+                    INSERT INTO book_history
+                    SELECT
+                        nextval(pg_get_serial_sequence('book_history', 'history_id')),
+                        'DELETE',
+                        NOW(),
+                        (OLD).*;
                     RETURN OLD;
-                ELSIF (TG_OP = 'UPDATE') THEN
-                    INSERT INTO book_history (
-                        id, pub_id, title, author, publisher_id, status, price,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        NEW.id, NEW.pub_id, NEW.title, NEW.author, NEW.publisher_id, NEW.status, NEW.price,
-                        NEW.created_at, NEW.updated_at, NEW.created_by, NEW.updated_by,
-                        'UPDATE', NOW()
-                    );
-                    RETURN NEW;
-                ELSIF (TG_OP = 'INSERT') THEN
-                    INSERT INTO book_history (
-                        id, pub_id, title, author, publisher_id, status, price,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        NEW.id, NEW.pub_id, NEW.title, NEW.author, NEW.publisher_id, NEW.status, NEW.price,
-                        NEW.created_at, NEW.updated_at, NEW.created_by, NEW.updated_by,
-                        'INSERT', NOW()
-                    );
+                ELSE
+                    INSERT INTO book_history
+                    SELECT
+                        nextval(pg_get_serial_sequence('book_history', 'history_id')),
+                        TG_OP,
+                        NOW(),
+                        (NEW).*;
                     RETURN NEW;
                 END IF;
-                RETURN NULL;
             END;
             $$ LANGUAGE plpgsql;
             "#,
@@ -81,40 +63,22 @@ impl MigrationTrait for Migration {
             CREATE OR REPLACE FUNCTION save_history_publisher() RETURNS TRIGGER AS $$
             BEGIN
                 IF (TG_OP = 'DELETE') THEN
-                    INSERT INTO publisher_history (
-                        id, pub_id, name,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        OLD.id, OLD.pub_id, OLD.name,
-                        OLD.created_at, OLD.updated_at, OLD.created_by, OLD.updated_by,
-                        'DELETE', NOW()
-                    );
+                    INSERT INTO publisher_history
+                    SELECT
+                        nextval(pg_get_serial_sequence('publisher_history', 'history_id')),
+                        'DELETE',
+                        NOW(),
+                        (OLD).*;
                     RETURN OLD;
-                ELSIF (TG_OP = 'UPDATE') THEN
-                    INSERT INTO publisher_history (
-                        id, pub_id, name,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        NEW.id, NEW.pub_id, NEW.name,
-                        NEW.created_at, NEW.updated_at, NEW.created_by, NEW.updated_by,
-                        'UPDATE', NOW()
-                    );
-                    RETURN NEW;
-                ELSIF (TG_OP = 'INSERT') THEN
-                    INSERT INTO publisher_history (
-                        id, pub_id, name,
-                        created_at, updated_at, created_by, updated_by,
-                        operation_type, operation_at
-                    ) VALUES (
-                        NEW.id, NEW.pub_id, NEW.name,
-                        NEW.created_at, NEW.updated_at, NEW.created_by, NEW.updated_by,
-                        'INSERT', NOW()
-                    );
+                ELSE
+                    INSERT INTO publisher_history
+                    SELECT
+                        nextval(pg_get_serial_sequence('publisher_history', 'history_id')),
+                        TG_OP,
+                        NOW(),
+                        (NEW).*;
                     RETURN NEW;
                 END IF;
-                RETURN NULL;
             END;
             $$ LANGUAGE plpgsql;
             "#,
