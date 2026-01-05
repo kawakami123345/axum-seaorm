@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { useGetAllPublishers, useCreatePublisher, useUpdatePublisher } from '../api/endpoints/publisher';
+import { useGetAllPublishers, useCreatePublisher, useUpdatePublisher, type getAllPublishersResponse } from '../api/endpoints/publisher/publisher';
 import BudgetSummary from '../components/BudgetSummary';
 import PublisherModal from '../components/PublisherModal';
 import type { PublisherResponseDto, PublisherCreateDto, PublisherUpdateDto } from '../api/model';
 
 const Publishers = () => {
-    const { data: publishers = [], isLoading, error } = useGetAllPublishers();
-    const createMutation = useCreatePublisher();
-    const updateMutation = useUpdatePublisher();
+    const { data: publishersData, isLoading, error } = useGetAllPublishers<getAllPublishersResponse, Error>();
+    const publishers = publishersData?.data || [];
+
+    const createMutation = useCreatePublisher<Error>();
+    const updateMutation = useUpdatePublisher<Error>();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPublisher, setSelectedPublisher] = useState<PublisherResponseDto | undefined>(undefined);
@@ -36,7 +38,7 @@ const Publishers = () => {
                 }
             );
         } else {
-            createMutation.mutate(data as PublisherCreateDto, {
+            createMutation.mutate({ data: data as PublisherCreateDto }, {
                 onSuccess: () => handleModalClose(),
             });
         }

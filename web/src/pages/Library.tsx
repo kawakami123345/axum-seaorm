@@ -1,13 +1,18 @@
 import { useState } from 'react';
-import { useGetAllBooks, useCreateBook, useUpdateBook } from '../api/endpoints/book';
+import { useGetAllBooks, useCreateBook, useUpdateBook, useChangeBookAppliedAt, type getAllBooksResponse } from '../api/endpoints/book/book';
 import BudgetSummary from '../components/BudgetSummary';
 import BookModal from '../components/BookModal';
 import type { BookResponseDto, BookCreateDto, BookUpdateDto } from '../api/model';
 
 const Library = () => {
-    const { data: books = [], isLoading, error } = useGetAllBooks();
-    const createMutation = useCreateBook();
-    const updateMutation = useUpdateBook();
+    const { data: booksData, isLoading, error } = useGetAllBooks<getAllBooksResponse, Error>();
+    // The response object contains the data array
+    const books = booksData?.data || [];
+
+    // Mutation hooks usually take TError as the first generic argument
+    const createMutation = useCreateBook<Error>();
+    const updateMutation = useUpdateBook<Error>();
+    const changeAppliedAtMutation = useChangeBookAppliedAt<Error>();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedBook, setSelectedBook] = useState<BookResponseDto | undefined>(undefined);
@@ -33,21 +38,53 @@ const Library = () => {
                 { pubId: selectedBook.pub_id, data: data as BookUpdateDto },
                 {
                     onSuccess: () => handleModalClose(),
-                    onError: (err) => {
+                    onError: (err: Error) => {
                         console.error('Update failed:', err);
                         alert('更新に失敗しました: ' + err.message);
                     },
                 }
             );
         } else {
-            createMutation.mutate(data as BookCreateDto, {
+            // Orval with tags-split usually expects { data: body } for mutation arguments if configured that way
+            createMutation.mutate({ data: data as BookCreateDto }, {
                 onSuccess: () => handleModalClose(),
-                onError: (err) => {
+                onError: (err: Error) => {
                     console.error('Create failed:', err);
                     alert('登録に失敗しました: ' + err.message);
                 },
             });
         }
+    };
+
+    const handleApply = (book: BookResponseDto, e: React.MouseEvent) => {
+        e.stopPropagation();
+
+        const today = new Date().toISOString().split('T')[0];
+        const inputDate = prompt(`「${book.title}」の経費申請を行います。\n申請日を入力してください (YYYY-MM-DD):`, today);
+
+        if (inputDate === null) return; // User cancelled
+
+        const date = new Date(inputDate);
+        if (isNaN(date.getTime())) {
+            alert('無効な日付形式です。YYYY-MM-DD形式で入力してください。');
+            return;
+        }
+
+        changeAppliedAtMutation.mutate(
+            {
+                pubId: book.pub_id,
+                data: { applied_at: date.toISOString() }
+            },
+            {
+                onSuccess: () => {
+                    window.location.reload();
+                },
+                onError: (err: Error) => {
+                    console.error('Apply failed:', err);
+                    alert('申請に失敗しました: ' + err.message);
+                }
+            }
+        );
     };
 
 
@@ -158,20 +195,25 @@ const Library = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex items-center justify-center gap-2">
-                                                        <span
-                                                            className={`material-symbols-outlined text-xl ${!isPending ? 'text-primary' : 'text-gray-400'
-                                                                }`}
-                                                        >
-                                                            {!isPending ? 'check_box' : 'check_box_outline_blank'}
-                                                        </span>
-                                                        <span
-                                                            className={`text-xs font-bold ${!isPending
-                                                                ? 'text-text-main dark:text-gray-300 font-medium'
-                                                                : 'text-accent-yellow dark:text-amber-500'
-                                                                }`}
-                                                        >
-                                                            {!isPending ? '申請済' : '未申請'}
-                                                        </span>
+                                                        {!isPending ? (
+                                                            <>
+                                                                <span className="material-symbols-outlined text-xl text-primary">
+                                                                    check_box
+                                                                </span>
+                                                                <span className="text-xs font-bold text-text-main dark:text-gray-300 font-medium">
+                                                                    申請済
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <button
+                                                                onClick={(e) => handleApply(book, e)}
+                                                                className="flex items-center gap-1 bg-white border border-primary text-primary px-3 py-1 rounded text-xs font-bold hover:bg-primary hover:text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                disabled={changeAppliedAtMutation.isPending}
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">send</span>
+                                                                申請
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm font-bold text-text-main dark:text-white text-right">

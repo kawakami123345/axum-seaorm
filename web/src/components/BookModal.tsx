@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { BookResponseDto, BookCreateDto, BookUpdateDto } from '../api/model';
-import { useGetAllPublishers } from '../api/endpoints/publisher';
-import { useGetAllShops } from '../api/endpoints/shop';
+import { useGetAllPublishers, type getAllPublishersResponse } from '../api/endpoints/publisher/publisher';
+import { useGetAllShops, type getAllShopsResponse } from '../api/endpoints/shop/shop';
 
 interface BookModalProps {
     isOpen: boolean;
@@ -12,8 +12,12 @@ interface BookModalProps {
 }
 
 const BookModal = ({ isOpen, onClose, onSubmit, book, isSubmitting }: BookModalProps) => {
-    const { data: publishers = [], isLoading: isLoadingPublishers } = useGetAllPublishers();
-    const { data: shops = [] } = useGetAllShops();
+    const { data: publishersData, isLoading: isLoadingPublishers } = useGetAllPublishers<getAllPublishersResponse, Error>();
+    const publishers = publishersData?.data || [];
+
+    const { data: shopsData } = useGetAllShops<getAllShopsResponse, Error>();
+    const shops = shopsData?.data || [];
+
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const [formData, setFormData] = useState<BookCreateDto>({
