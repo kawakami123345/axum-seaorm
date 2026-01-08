@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod book;
 pub mod dashboard;
 pub mod error;
@@ -19,10 +20,11 @@ pub struct AppState {
     pub publisher_usecase: usecase::publisher::Service,
     pub shop_usecase: usecase::shop::Service,
     pub dashboard_usecase: usecase::dashboard::Service,
+    pub oidc_client: openidconnect::core::CoreClient,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
-    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         // routes!はPath毎に分ける必要あり
         .routes(routes!(book::get_all, book::create))
         .routes(routes!(book::get, book::update, book::delete))
@@ -51,8 +53,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         std::fs::write("openapi.json", openapi_json).expect("Failed to write openapi.json");
     }
 
-    router
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
+    // 認証が必要なルート
+    let protected_routes = api_router.layer(axum::middleware::from_fn(auth::require_auth));
+
+    // 認証不要のルート (login, callback, logout, swagger-ui)
+    let public_routes = Router::new()
+        .merge(auth::auth_router())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api));
+
+    protected_routes
+        .merge(public_routes)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }

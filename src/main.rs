@@ -30,15 +30,21 @@ async fn main() -> anyhow::Result<()> {
     let shop_usecase = usecase::shop::Service::new(shop_repo);
     let dashboard_usecase = usecase::dashboard::Service::new(book_repo.clone());
 
+    // OIDC Client
+    let oidc_client = api::auth::create_oidc_client().await?;
+
     let state = Arc::new(AppState {
         book_usecase,
         publisher_usecase,
         shop_usecase,
         dashboard_usecase,
+        oidc_client,
     });
 
     // 4. Start Server
-    let router = create_router(state);
+    let key = axum_extra::extract::cookie::Key::generate();
+    let router = create_router(state).layer(axum::Extension(key));
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     println!("Server running on http://localhost:3000");
 

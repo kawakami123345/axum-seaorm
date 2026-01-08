@@ -17,9 +17,9 @@ services:
     restart: unless-stopped
     ports:
       - "8443:8443"
+      - "3636:3636"
     volumes:
-      - kanidm_data:/data
+      - ./kanidm/data:/data
 
 volumes:
   postgres_data:
-  kanidm_data:

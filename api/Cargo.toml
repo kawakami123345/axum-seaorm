@@ -14,6 +14,11 @@ utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true }
+openidconnect = { workspace = true }
+axum-extra = { workspace = true }
+anyhow = { workspace = true }
+reqwest = "0.12"
+time = "0.3.44"
 
 
 [dev-dependencies]
