@@ -17,7 +17,6 @@ use openidconnect::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::AppState;
 
@@ -34,7 +33,7 @@ pub fn auth_router() -> Router<Arc<AppState>> {
         .route("/logout", get(logout))
 }
 
-pub async fn create_oidc_client() -> anyhow::Result<CoreClient> {
+pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result<CoreClient> {
     let client_id =
         ClientId::new(std::env::var("OIDC_CLIENT_ID").context("OIDC_CLIENT_ID must be set")?);
     let client_secret = ClientSecret::new(
@@ -43,10 +42,11 @@ pub async fn create_oidc_client() -> anyhow::Result<CoreClient> {
     let issuer_url =
         IssuerUrl::new(std::env::var("OIDC_ISSUER_URL").context("OIDC_ISSUER_URL must be set")?)?;
 
-    // Use custom http client to allow self-signed certs (localhost)
-    let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, &async_http_client)
-        .await
-        .context("Failed to discover OIDC provider metadata")?;
+    // Use custom http client to handle reqwest version mismatch
+    let provider_metadata =
+        CoreProviderMetadata::discover_async(issuer_url, |req| async_http_client(http_client, req))
+            .await
+            .context("Failed to discover OIDC provider metadata")?;
 
     let app_url = std::env::var("APP_URL").context("APP_URL must be set")?;
     let redirect_url = format!("{}/callback", app_url);
@@ -58,17 +58,11 @@ pub async fn create_oidc_client() -> anyhow::Result<CoreClient> {
     Ok(client)
 }
 
-// Custom HTTP client that ignores SSL verification (for dev/localhost)
-// Handles conversion between http 0.2 (openidconnect) and http 1.0 (reqwest 0.12)
+// Custom HTTP client that handles conversion between http 0.2 (openidconnect) and http 1.0 (reqwest 0.12)
 pub async fn async_http_client(
+    client: &reqwest::Client,
     request: HttpRequest,
 ) -> Result<HttpResponse, OidcReqwestError<reqwest::Error>> {
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
-
     // Convert Method (http 0.2 -> 1.0 via string)
     let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
         .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
@@ -195,9 +189,10 @@ async fn callback(
         return Redirect::to("/login?error=invalid_state");
     }
 
+    let http_client = &state.http_client;
     let token_response = client
         .exchange_code(AuthorizationCode::new(params.code))
-        .request_async(async_http_client)
+        .request_async(|req| async_http_client(http_client, req))
         .await;
 
     match token_response {
@@ -210,11 +205,11 @@ async fn callback(
 
                     match claims {
                         Ok(claims) => {
-                            println!("User login: {:?}", claims);
+                            let sub = claims.subject().to_string();
+                            println!("User login: sub={:?}, claims={:?}", sub, claims);
 
                             // セッションCookieを設定
-                            let mut session_cookie =
-                                Cookie::new(SESSION_COOKIE_NAME, "authenticated");
+                            let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, sub);
                             session_cookie.set_path("/");
                             session_cookie.set_http_only(true);
                             session_cookie.set_same_site(SameSite::Lax);
@@ -263,16 +258,14 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
 
     cookies.private(&state.cookie_key).remove(cookie);
 
-    // Keycloak logout logic
+    // Logout logic
     let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
-    let issuer = std::env::var("OIDC_ISSUER_URL").expect("OIDC_ISSUER_URL must be set");
+    let logout_url_base = std::env::var("OIDC_LOGOUT_URL").expect("OIDC_LOGOUT_URL must be set");
     let frontend_url =
         std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
 
-    // Construct Keycloak logout URL directly
     let mut url =
-        openidconnect::url::Url::parse(&format!("{}/protocol/openid-connect/logout", issuer))
-            .expect("Failed to parse logout url");
+        openidconnect::url::Url::parse(&logout_url_base).expect("Failed to parse logout url");
 
     url.query_pairs_mut()
         .append_pair(

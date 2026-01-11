@@ -23,6 +23,7 @@ pub struct AppState {
     pub dashboard_usecase: usecase::dashboard::Service,
     pub oidc_client: openidconnect::core::CoreClient,
     pub cookie_key: tower_cookies::Key,
+    pub http_client: reqwest::Client,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {

@@ -30,8 +30,13 @@ async fn main() -> anyhow::Result<()> {
     let shop_usecase = usecase::shop::Service::new(shop_repo);
     let dashboard_usecase = usecase::dashboard::Service::new(book_repo.clone());
 
+    // HTTP Client
+    let http_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
     // OIDC Client
-    let oidc_client = api::auth::create_oidc_client().await?;
+    let oidc_client = api::auth::create_oidc_client(&http_client).await?;
 
     let cookie_key = std::env::var("COOKIE_KEY")
         .map(|s| tower_cookies::Key::derive_from(s.as_bytes()))
@@ -44,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         dashboard_usecase,
         oidc_client,
         cookie_key,
+        http_client,
     });
 
     // 4. Start Server

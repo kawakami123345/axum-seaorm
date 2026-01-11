@@ -3049,6 +3049,7 @@ dependencies = [
  "migration",
  "openidconnect",
  "publisher",
+ "reqwest 0.12.28",
  "rstest",
  "sea-orm",
  "shop",

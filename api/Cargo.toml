@@ -19,7 +19,7 @@ axum-extra = { workspace = true }
 tower-cookies = { workspace = true }
 
 anyhow = { workspace = true }
-reqwest = "0.12"
+reqwest = { workspace = true }
 time = "0.3.44"
 
 
