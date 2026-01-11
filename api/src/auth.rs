@@ -17,6 +17,7 @@ use openidconnect::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use tracing::{error, info};
 
 use crate::AppState;
 
@@ -146,17 +147,19 @@ async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl Int
         .add_extra_param("prompt", "login")
         .url();
 
+    let max_age = time::Duration::minutes(10);
+
     let mut nonce_cookie = Cookie::new(NONCE_COOKIE_NAME, nonce.secret().to_string());
     nonce_cookie.set_path("/");
     nonce_cookie.set_http_only(true);
     nonce_cookie.set_same_site(SameSite::Lax);
-    nonce_cookie.set_max_age(Some(time::Duration::minutes(10).try_into().unwrap()));
+    nonce_cookie.set_max_age(Some(max_age));
 
     let mut state_cookie = Cookie::new(STATE_COOKIE_NAME, csrf_token.secret().to_string());
     state_cookie.set_path("/");
     state_cookie.set_http_only(true);
     state_cookie.set_same_site(SameSite::Lax);
-    state_cookie.set_max_age(Some(time::Duration::minutes(10).try_into().unwrap()));
+    state_cookie.set_max_age(Some(max_age));
 
     cookies.private(&state.cookie_key).add(nonce_cookie);
     cookies.private(&state.cookie_key).add(state_cookie);
@@ -206,15 +209,18 @@ async fn callback(
                     match claims {
                         Ok(claims) => {
                             let sub = claims.subject().to_string();
-                            println!("User login: sub={:?}, claims={:?}", sub, claims);
+                            info!(sub = %sub, "User login successful");
 
                             // セッションCookieを設定
                             let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, sub);
                             session_cookie.set_path("/");
                             session_cookie.set_http_only(true);
                             session_cookie.set_same_site(SameSite::Lax);
-                            session_cookie
-                                .set_max_age(Some(time::Duration::hours(24).try_into().unwrap()));
+                            session_cookie.set_max_age(Some(
+                                time::Duration::hours(24).try_into().unwrap_or_else(|_| {
+                                    time::Duration::seconds(86400).try_into().unwrap()
+                                }),
+                            ));
 
                             cookies.private(&state.cookie_key).add(session_cookie);
 
@@ -235,7 +241,7 @@ async fn callback(
                             Redirect::to(&frontend_url)
                         }
                         Err(e) => {
-                            println!("User login: Err({:?})", e);
+                            error!(error = ?e, "ID token validation failed");
                             Redirect::to("/login?error=invalid_token")
                         }
                     }
@@ -244,7 +250,7 @@ async fn callback(
             }
         }
         Err(e) => {
-            println!("Token exchange failed: {:?}", e);
+            error!(error = ?e, "Token exchange failed");
             Redirect::to("/login?error=token_exchange_failed")
         }
     }
@@ -259,13 +265,30 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
     cookies.private(&state.cookie_key).remove(cookie);
 
     // Logout logic
-    let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
-    let logout_url_base = std::env::var("OIDC_LOGOUT_URL").expect("OIDC_LOGOUT_URL must be set");
+    let client_id = match std::env::var("OIDC_CLIENT_ID") {
+        Ok(v) => v,
+        Err(_) => {
+            error!("OIDC_CLIENT_ID must be set");
+            return Redirect::to("/login?error=internal_configuration_error").into_response();
+        }
+    };
+    let logout_url_base = match std::env::var("OIDC_LOGOUT_URL") {
+        Ok(v) => v,
+        Err(_) => {
+            error!("OIDC_LOGOUT_URL must be set");
+            return Redirect::to("/login?error=internal_configuration_error").into_response();
+        }
+    };
     let frontend_url =
         std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
 
-    let mut url =
-        openidconnect::url::Url::parse(&logout_url_base).expect("Failed to parse logout url");
+    let mut url = match openidconnect::url::Url::parse(&logout_url_base) {
+        Ok(u) => u,
+        Err(e) => {
+            error!(error = ?e, "Failed to parse logout url");
+            return Redirect::to("/login?error=internal_configuration_error").into_response();
+        }
+    };
 
     url.query_pairs_mut()
         .append_pair(
@@ -274,7 +297,7 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
         )
         .append_pair("client_id", &client_id);
 
-    Redirect::to(url.as_str())
+    Redirect::to(url.as_str()).into_response()
 }
 
 /// CSRF ミドルウェア: ミューテートするリクエスト (POST, PUT, DELETE, PATCH) に対して CSRF トークンの検証を行う
