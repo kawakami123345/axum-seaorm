@@ -20,7 +20,10 @@ import type {
 import type {
   DashboardDto
 } from '../../model'
+import { customFetch } from '../../custom-fetch';
 
+
+type SecondParameter<T extends (...args: any) => any> = Parameters<T>[1];
 
 
 export type getAnnualSummaryResponse = {
@@ -32,42 +35,37 @@ export type getAnnualSummaryResponse = {
 export const getGetAnnualSummaryUrl = () => {
 
 
-  return `/api/dashboard/annual-summary`
+  return `/dashboard/annual-summary`
 }
 
 export const getAnnualSummary = async ( options?: RequestInit): Promise<getAnnualSummaryResponse> => {
   
-  const res = await fetch(getGetAnnualSummaryUrl(),
+  return customFetch<Promise<getAnnualSummaryResponse>>(getGetAnnualSummaryUrl(),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetAnnualSummaryQueryKey = () => {
-    return [`/api/dashboard/annual-summary`] as const;
+    return [`/dashboard/annual-summary`] as const;
     }
 
     
-export const getGetAnnualSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAnnualSummary>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, fetch?: RequestInit}
+export const getGetAnnualSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAnnualSummary>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetAnnualSummaryQueryKey();
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAnnualSummary>>> = ({ signal }) => getAnnualSummary({ signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAnnualSummary>>> = ({ signal }) => getAnnualSummary({ signal, ...requestOptions });
 
       
 
@@ -87,7 +85,7 @@ export function useGetAnnualSummary<TData = Awaited<ReturnType<typeof getAnnualS
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAnnualSummary<TData = Awaited<ReturnType<typeof getAnnualSummary>>, TError = unknown>(
@@ -97,16 +95,16 @@ export function useGetAnnualSummary<TData = Awaited<ReturnType<typeof getAnnualS
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAnnualSummary<TData = Awaited<ReturnType<typeof getAnnualSummary>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetAnnualSummary<TData = Awaited<ReturnType<typeof getAnnualSummary>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnnualSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 

@@ -235,7 +235,9 @@ async fn callback(
                             delete_cookie.set_name(STATE_COOKIE_NAME);
                             cookies.private(&state.cookie_key).remove(delete_cookie);
 
-                            Redirect::to("/")
+                            let frontend_url =
+                                std::env::var("FRONTEND_URL").unwrap_or_else(|_| "/".to_string());
+                            Redirect::to(&frontend_url)
                         }
                         Err(e) => {
                             println!("User login: Err({:?})", e);
@@ -264,7 +266,8 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
     // Keycloak logout logic
     let client_id = std::env::var("OIDC_CLIENT_ID").expect("OIDC_CLIENT_ID must be set");
     let issuer = std::env::var("OIDC_ISSUER_URL").expect("OIDC_ISSUER_URL must be set");
-    let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
 
     // Construct Keycloak logout URL directly
     let mut url =
@@ -272,7 +275,10 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
             .expect("Failed to parse logout url");
 
     url.query_pairs_mut()
-        .append_pair("post_logout_redirect_uri", &format!("{}/login", app_url))
+        .append_pair(
+            "post_logout_redirect_uri",
+            &format!("{}/login", frontend_url),
+        )
         .append_pair("client_id", &client_id);
 
     Redirect::to(url.as_str())

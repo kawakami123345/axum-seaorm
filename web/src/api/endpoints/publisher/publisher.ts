@@ -26,7 +26,10 @@ import type {
   PublisherResponseDto,
   PublisherUpdateDto
 } from '../../model'
+import { customFetch } from '../../custom-fetch';
 
+
+type SecondParameter<T extends (...args: any) => any> = Parameters<T>[1];
 
 
 export type getAllPublishersResponse = {
@@ -38,42 +41,37 @@ export type getAllPublishersResponse = {
 export const getGetAllPublishersUrl = () => {
 
 
-  return `/api/publishers`
+  return `/publishers`
 }
 
 export const getAllPublishers = async ( options?: RequestInit): Promise<getAllPublishersResponse> => {
   
-  const res = await fetch(getGetAllPublishersUrl(),
+  return customFetch<Promise<getAllPublishersResponse>>(getGetAllPublishersUrl(),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetAllPublishersQueryKey = () => {
-    return [`/api/publishers`] as const;
+    return [`/publishers`] as const;
     }
 
     
-export const getGetAllPublishersQueryOptions = <TData = Awaited<ReturnType<typeof getAllPublishers>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, fetch?: RequestInit}
+export const getGetAllPublishersQueryOptions = <TData = Awaited<ReturnType<typeof getAllPublishers>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetAllPublishersQueryKey();
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllPublishers>>> = ({ signal }) => getAllPublishers({ signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllPublishers>>> = ({ signal }) => getAllPublishers({ signal, ...requestOptions });
 
       
 
@@ -93,7 +91,7 @@ export function useGetAllPublishers<TData = Awaited<ReturnType<typeof getAllPubl
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAllPublishers<TData = Awaited<ReturnType<typeof getAllPublishers>>, TError = unknown>(
@@ -103,16 +101,16 @@ export function useGetAllPublishers<TData = Awaited<ReturnType<typeof getAllPubl
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAllPublishers<TData = Awaited<ReturnType<typeof getAllPublishers>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetAllPublishers<TData = Awaited<ReturnType<typeof getAllPublishers>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllPublishers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 
@@ -136,12 +134,12 @@ export type createPublisherResponse = {
 export const getCreatePublisherUrl = () => {
 
 
-  return `/api/publishers`
+  return `/publishers`
 }
 
 export const createPublisher = async (publisherCreateDto: PublisherCreateDto, options?: RequestInit): Promise<createPublisherResponse> => {
   
-  const res = await fetch(getCreatePublisherUrl(),
+  return customFetch<Promise<createPublisherResponse>>(getCreatePublisherUrl(),
   {      
     ...options,
     method: 'POST',
@@ -149,20 +147,15 @@ export const createPublisher = async (publisherCreateDto: PublisherCreateDto, op
     body: JSON.stringify(
       publisherCreateDto,)
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getCreatePublisherMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublisher>>, TError,{data: PublisherCreateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublisher>>, TError,{data: PublisherCreateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createPublisher>>, TError,{data: PublisherCreateDto}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -170,7 +163,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPublisher>>, {data: PublisherCreateDto}> = (props) => {
           const {data} = props ?? {};
 
-          return  createPublisher(data,fetchOptions)
+          return  createPublisher(data,requestOptions)
         }
 
         
@@ -183,7 +176,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type CreatePublisherMutationError = unknown
 
     export const useCreatePublisher = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublisher>>, TError,{data: PublisherCreateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublisher>>, TError,{data: PublisherCreateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof createPublisher>>,
         TError,
@@ -204,42 +197,37 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
 export const getGetPublisherUrl = (pubId: string,) => {
 
 
-  return `/api/publishers/${pubId}`
+  return `/publishers/${pubId}`
 }
 
 export const getPublisher = async (pubId: string, options?: RequestInit): Promise<getPublisherResponse> => {
   
-  const res = await fetch(getGetPublisherUrl(pubId),
+  return customFetch<Promise<getPublisherResponse>>(getGetPublisherUrl(pubId),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetPublisherQueryKey = (pubId: string,) => {
-    return [`/api/publishers/${pubId}`] as const;
+    return [`/publishers/${pubId}`] as const;
     }
 
     
-export const getGetPublisherQueryOptions = <TData = Awaited<ReturnType<typeof getPublisher>>, TError = void>(pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, fetch?: RequestInit}
+export const getGetPublisherQueryOptions = <TData = Awaited<ReturnType<typeof getPublisher>>, TError = void>(pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetPublisherQueryKey(pubId);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublisher>>> = ({ signal }) => getPublisher(pubId, { signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublisher>>> = ({ signal }) => getPublisher(pubId, { signal, ...requestOptions });
 
       
 
@@ -259,7 +247,7 @@ export function useGetPublisher<TData = Awaited<ReturnType<typeof getPublisher>>
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetPublisher<TData = Awaited<ReturnType<typeof getPublisher>>, TError = void>(
@@ -269,16 +257,16 @@ export function useGetPublisher<TData = Awaited<ReturnType<typeof getPublisher>>
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetPublisher<TData = Awaited<ReturnType<typeof getPublisher>>, TError = void>(
- pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, fetch?: RequestInit}
+ pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetPublisher<TData = Awaited<ReturnType<typeof getPublisher>>, TError = void>(
- pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, fetch?: RequestInit}
+ pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublisher>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 
@@ -302,13 +290,13 @@ export type updatePublisherResponse = {
 export const getUpdatePublisherUrl = (pubId: string,) => {
 
 
-  return `/api/publishers/${pubId}`
+  return `/publishers/${pubId}`
 }
 
 export const updatePublisher = async (pubId: string,
     publisherUpdateDto: PublisherUpdateDto, options?: RequestInit): Promise<updatePublisherResponse> => {
   
-  const res = await fetch(getUpdatePublisherUrl(pubId),
+  return customFetch<Promise<updatePublisherResponse>>(getUpdatePublisherUrl(pubId),
   {      
     ...options,
     method: 'PUT',
@@ -316,20 +304,15 @@ export const updatePublisher = async (pubId: string,
     body: JSON.stringify(
       publisherUpdateDto,)
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getUpdatePublisherMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePublisher>>, TError,{pubId: string;data: PublisherUpdateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePublisher>>, TError,{pubId: string;data: PublisherUpdateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updatePublisher>>, TError,{pubId: string;data: PublisherUpdateDto}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -337,7 +320,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePublisher>>, {pubId: string;data: PublisherUpdateDto}> = (props) => {
           const {pubId,data} = props ?? {};
 
-          return  updatePublisher(pubId,data,fetchOptions)
+          return  updatePublisher(pubId,data,requestOptions)
         }
 
         
@@ -350,7 +333,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type UpdatePublisherMutationError = void
 
     export const useUpdatePublisher = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePublisher>>, TError,{pubId: string;data: PublisherUpdateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePublisher>>, TError,{pubId: string;data: PublisherUpdateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof updatePublisher>>,
         TError,
@@ -371,32 +354,27 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
 export const getDeletePublisherUrl = (pubId: string,) => {
 
 
-  return `/api/publishers/${pubId}`
+  return `/publishers/${pubId}`
 }
 
 export const deletePublisher = async (pubId: string, options?: RequestInit): Promise<deletePublisherResponse> => {
   
-  const res = await fetch(getDeletePublisherUrl(pubId),
+  return customFetch<Promise<deletePublisherResponse>>(getDeletePublisherUrl(pubId),
   {      
     ...options,
     method: 'DELETE'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getDeletePublisherMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublisher>>, TError,{pubId: string}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublisher>>, TError,{pubId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deletePublisher>>, TError,{pubId: string}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -404,7 +382,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePublisher>>, {pubId: string}> = (props) => {
           const {pubId} = props ?? {};
 
-          return  deletePublisher(pubId,fetchOptions)
+          return  deletePublisher(pubId,requestOptions)
         }
 
         
@@ -417,7 +395,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type DeletePublisherMutationError = void
 
     export const useDeletePublisher = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublisher>>, TError,{pubId: string}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublisher>>, TError,{pubId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof deletePublisher>>,
         TError,

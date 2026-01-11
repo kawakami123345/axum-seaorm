@@ -27,7 +27,10 @@ import type {
   BookResponseDto,
   BookUpdateDto
 } from '../../model'
+import { customFetch } from '../../custom-fetch';
 
+
+type SecondParameter<T extends (...args: any) => any> = Parameters<T>[1];
 
 
 export type getAllBooksResponse = {
@@ -39,42 +42,37 @@ export type getAllBooksResponse = {
 export const getGetAllBooksUrl = () => {
 
 
-  return `/api/books`
+  return `/books`
 }
 
 export const getAllBooks = async ( options?: RequestInit): Promise<getAllBooksResponse> => {
   
-  const res = await fetch(getGetAllBooksUrl(),
+  return customFetch<Promise<getAllBooksResponse>>(getGetAllBooksUrl(),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetAllBooksQueryKey = () => {
-    return [`/api/books`] as const;
+    return [`/books`] as const;
     }
 
     
-export const getGetAllBooksQueryOptions = <TData = Awaited<ReturnType<typeof getAllBooks>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, fetch?: RequestInit}
+export const getGetAllBooksQueryOptions = <TData = Awaited<ReturnType<typeof getAllBooks>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetAllBooksQueryKey();
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllBooks>>> = ({ signal }) => getAllBooks({ signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllBooks>>> = ({ signal }) => getAllBooks({ signal, ...requestOptions });
 
       
 
@@ -94,7 +92,7 @@ export function useGetAllBooks<TData = Awaited<ReturnType<typeof getAllBooks>>, 
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAllBooks<TData = Awaited<ReturnType<typeof getAllBooks>>, TError = unknown>(
@@ -104,16 +102,16 @@ export function useGetAllBooks<TData = Awaited<ReturnType<typeof getAllBooks>>, 
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetAllBooks<TData = Awaited<ReturnType<typeof getAllBooks>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetAllBooks<TData = Awaited<ReturnType<typeof getAllBooks>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, fetch?: RequestInit}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 
@@ -137,12 +135,12 @@ export type createBookResponse = {
 export const getCreateBookUrl = () => {
 
 
-  return `/api/books`
+  return `/books`
 }
 
 export const createBook = async (bookCreateDto: BookCreateDto, options?: RequestInit): Promise<createBookResponse> => {
   
-  const res = await fetch(getCreateBookUrl(),
+  return customFetch<Promise<createBookResponse>>(getCreateBookUrl(),
   {      
     ...options,
     method: 'POST',
@@ -150,20 +148,15 @@ export const createBook = async (bookCreateDto: BookCreateDto, options?: Request
     body: JSON.stringify(
       bookCreateDto,)
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getCreateBookMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBook>>, TError,{data: BookCreateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBook>>, TError,{data: BookCreateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createBook>>, TError,{data: BookCreateDto}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -171,7 +164,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBook>>, {data: BookCreateDto}> = (props) => {
           const {data} = props ?? {};
 
-          return  createBook(data,fetchOptions)
+          return  createBook(data,requestOptions)
         }
 
         
@@ -184,7 +177,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type CreateBookMutationError = unknown
 
     export const useCreateBook = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBook>>, TError,{data: BookCreateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBook>>, TError,{data: BookCreateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof createBook>>,
         TError,
@@ -205,42 +198,37 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
 export const getGetYearAppliedBooksUrl = (year: number,) => {
 
 
-  return `/api/books/applied/${year}`
+  return `/books/applied/${year}`
 }
 
 export const getYearAppliedBooks = async (year: number, options?: RequestInit): Promise<getYearAppliedBooksResponse> => {
   
-  const res = await fetch(getGetYearAppliedBooksUrl(year),
+  return customFetch<Promise<getYearAppliedBooksResponse>>(getGetYearAppliedBooksUrl(year),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetYearAppliedBooksQueryKey = (year: number,) => {
-    return [`/api/books/applied/${year}`] as const;
+    return [`/books/applied/${year}`] as const;
     }
 
     
-export const getGetYearAppliedBooksQueryOptions = <TData = Awaited<ReturnType<typeof getYearAppliedBooks>>, TError = unknown>(year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, fetch?: RequestInit}
+export const getGetYearAppliedBooksQueryOptions = <TData = Awaited<ReturnType<typeof getYearAppliedBooks>>, TError = unknown>(year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetYearAppliedBooksQueryKey(year);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getYearAppliedBooks>>> = ({ signal }) => getYearAppliedBooks(year, { signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getYearAppliedBooks>>> = ({ signal }) => getYearAppliedBooks(year, { signal, ...requestOptions });
 
       
 
@@ -260,7 +248,7 @@ export function useGetYearAppliedBooks<TData = Awaited<ReturnType<typeof getYear
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetYearAppliedBooks<TData = Awaited<ReturnType<typeof getYearAppliedBooks>>, TError = unknown>(
@@ -270,16 +258,16 @@ export function useGetYearAppliedBooks<TData = Awaited<ReturnType<typeof getYear
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetYearAppliedBooks<TData = Awaited<ReturnType<typeof getYearAppliedBooks>>, TError = unknown>(
- year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, fetch?: RequestInit}
+ year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetYearAppliedBooks<TData = Awaited<ReturnType<typeof getYearAppliedBooks>>, TError = unknown>(
- year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, fetch?: RequestInit}
+ year: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getYearAppliedBooks>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 
@@ -303,42 +291,37 @@ export type getBookResponse = {
 export const getGetBookUrl = (pubId: string,) => {
 
 
-  return `/api/books/${pubId}`
+  return `/books/${pubId}`
 }
 
 export const getBook = async (pubId: string, options?: RequestInit): Promise<getBookResponse> => {
   
-  const res = await fetch(getGetBookUrl(pubId),
+  return customFetch<Promise<getBookResponse>>(getGetBookUrl(pubId),
   {      
     ...options,
     method: 'GET'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 export const getGetBookQueryKey = (pubId: string,) => {
-    return [`/api/books/${pubId}`] as const;
+    return [`/books/${pubId}`] as const;
     }
 
     
-export const getGetBookQueryOptions = <TData = Awaited<ReturnType<typeof getBook>>, TError = void>(pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, fetch?: RequestInit}
+export const getGetBookQueryOptions = <TData = Awaited<ReturnType<typeof getBook>>, TError = void>(pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
-const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetBookQueryKey(pubId);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBook>>> = ({ signal }) => getBook(pubId, { signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBook>>> = ({ signal }) => getBook(pubId, { signal, ...requestOptions });
 
       
 
@@ -358,7 +341,7 @@ export function useGetBook<TData = Awaited<ReturnType<typeof getBook>>, TError =
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetBook<TData = Awaited<ReturnType<typeof getBook>>, TError = void>(
@@ -368,16 +351,16 @@ export function useGetBook<TData = Awaited<ReturnType<typeof getBook>>, TError =
           TError,
           TData
         > , 'initialData'
-      >, fetch?: RequestInit}
+      >, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 export function useGetBook<TData = Awaited<ReturnType<typeof getBook>>, TError = void>(
- pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, fetch?: RequestInit}
+ pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> }
 
 export function useGetBook<TData = Awaited<ReturnType<typeof getBook>>, TError = void>(
- pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, fetch?: RequestInit}
+ pubId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBook>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData> } {
 
@@ -401,13 +384,13 @@ export type updateBookResponse = {
 export const getUpdateBookUrl = (pubId: string,) => {
 
 
-  return `/api/books/${pubId}`
+  return `/books/${pubId}`
 }
 
 export const updateBook = async (pubId: string,
     bookUpdateDto: BookUpdateDto, options?: RequestInit): Promise<updateBookResponse> => {
   
-  const res = await fetch(getUpdateBookUrl(pubId),
+  return customFetch<Promise<updateBookResponse>>(getUpdateBookUrl(pubId),
   {      
     ...options,
     method: 'PUT',
@@ -415,20 +398,15 @@ export const updateBook = async (pubId: string,
     body: JSON.stringify(
       bookUpdateDto,)
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getUpdateBookMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBook>>, TError,{pubId: string;data: BookUpdateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBook>>, TError,{pubId: string;data: BookUpdateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateBook>>, TError,{pubId: string;data: BookUpdateDto}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -436,7 +414,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBook>>, {pubId: string;data: BookUpdateDto}> = (props) => {
           const {pubId,data} = props ?? {};
 
-          return  updateBook(pubId,data,fetchOptions)
+          return  updateBook(pubId,data,requestOptions)
         }
 
         
@@ -449,7 +427,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type UpdateBookMutationError = void
 
     export const useUpdateBook = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBook>>, TError,{pubId: string;data: BookUpdateDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBook>>, TError,{pubId: string;data: BookUpdateDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof updateBook>>,
         TError,
@@ -470,32 +448,27 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
 export const getDeleteBookUrl = (pubId: string,) => {
 
 
-  return `/api/books/${pubId}`
+  return `/books/${pubId}`
 }
 
 export const deleteBook = async (pubId: string, options?: RequestInit): Promise<deleteBookResponse> => {
   
-  const res = await fetch(getDeleteBookUrl(pubId),
+  return customFetch<Promise<deleteBookResponse>>(getDeleteBookUrl(pubId),
   {      
     ...options,
     method: 'DELETE'
     
     
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getDeleteBookMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBook>>, TError,{pubId: string}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBook>>, TError,{pubId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteBook>>, TError,{pubId: string}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -503,7 +476,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteBook>>, {pubId: string}> = (props) => {
           const {pubId} = props ?? {};
 
-          return  deleteBook(pubId,fetchOptions)
+          return  deleteBook(pubId,requestOptions)
         }
 
         
@@ -516,7 +489,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type DeleteBookMutationError = void
 
     export const useDeleteBook = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBook>>, TError,{pubId: string}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBook>>, TError,{pubId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof deleteBook>>,
         TError,
@@ -537,13 +510,13 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
 export const getChangeBookAppliedAtUrl = (pubId: string,) => {
 
 
-  return `/api/books/${pubId}/applied_at`
+  return `/books/${pubId}/applied_at`
 }
 
 export const changeBookAppliedAt = async (pubId: string,
     bookChangeAppliedAtDto: BookChangeAppliedAtDto, options?: RequestInit): Promise<changeBookAppliedAtResponse> => {
   
-  const res = await fetch(getChangeBookAppliedAtUrl(pubId),
+  return customFetch<Promise<changeBookAppliedAtResponse>>(getChangeBookAppliedAtUrl(pubId),
   {      
     ...options,
     method: 'PUT',
@@ -551,20 +524,15 @@ export const changeBookAppliedAt = async (pubId: string,
     body: JSON.stringify(
       bookChangeAppliedAtDto,)
   }
-
-  )
-  const data = await res.json()
-
-  return { status: res.status, data, headers: res.headers }
-}
+);}
 
 
 
 
 export const getChangeBookAppliedAtMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeBookAppliedAt>>, TError,{pubId: string;data: BookChangeAppliedAtDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeBookAppliedAt>>, TError,{pubId: string;data: BookChangeAppliedAtDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof changeBookAppliedAt>>, TError,{pubId: string;data: BookChangeAppliedAtDto}, TContext> => {
-const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
+const {mutation: mutationOptions, request: requestOptions} = options ?? {};
 
       
 
@@ -572,7 +540,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeBookAppliedAt>>, {pubId: string;data: BookChangeAppliedAtDto}> = (props) => {
           const {pubId,data} = props ?? {};
 
-          return  changeBookAppliedAt(pubId,data,fetchOptions)
+          return  changeBookAppliedAt(pubId,data,requestOptions)
         }
 
         
@@ -585,7 +553,7 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?? {};
     export type ChangeBookAppliedAtMutationError = void
 
     export const useChangeBookAppliedAt = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeBookAppliedAt>>, TError,{pubId: string;data: BookChangeAppliedAtDto}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeBookAppliedAt>>, TError,{pubId: string;data: BookChangeAppliedAtDto}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationResult<
         Awaited<ReturnType<typeof changeBookAppliedAt>>,
         TError,

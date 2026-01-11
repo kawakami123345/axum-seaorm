@@ -33,7 +33,9 @@ async fn main() -> anyhow::Result<()> {
     // OIDC Client
     let oidc_client = api::auth::create_oidc_client().await?;
 
-    let cookie_key = tower_cookies::Key::generate();
+    let cookie_key = std::env::var("COOKIE_KEY")
+        .map(|s| tower_cookies::Key::derive_from(s.as_bytes()))
+        .unwrap_or_else(|_| tower_cookies::Key::generate());
 
     let state = Arc::new(AppState {
         book_usecase,

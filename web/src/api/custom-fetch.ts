@@ -19,15 +19,24 @@ export const customFetch = async <T>(
     });
 
     if (!response.ok) {
+        console.error(`Fetch error: ${response.status} ${response.statusText} for ${url}`);
+        if (response.status === 401) {
+            console.log('401 Unauthorized detected, redirecting to /login');
+            window.location.href = '/login';
+            // 遷移中のため、それ以上のエラーハンドリングを抑制するために未解決のPromiseを返すか、
+            // 直ちにthrowする。ここではコンポーネントの状態更新を避ける意図。
+            return new Promise(() => { });
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // 204 No Content の場合は null を返す
-    if (response.status === 204) {
-        return null as T;
-    }
+    const data = response.status === 204 ? null : await response.json();
 
-    return response.json();
+    return {
+        data,
+        status: response.status,
+        headers: response.headers,
+    } as T;
 };
 
 export default customFetch;
