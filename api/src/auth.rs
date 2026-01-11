@@ -153,12 +153,16 @@ async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl Int
     nonce_cookie.set_path("/");
     nonce_cookie.set_http_only(true);
     nonce_cookie.set_same_site(SameSite::Lax);
+    #[cfg(not(debug_assertions))]
+    nonce_cookie.set_secure(true);
     nonce_cookie.set_max_age(Some(max_age));
 
     let mut state_cookie = Cookie::new(STATE_COOKIE_NAME, csrf_token.secret().to_string());
     state_cookie.set_path("/");
     state_cookie.set_http_only(true);
     state_cookie.set_same_site(SameSite::Lax);
+    #[cfg(not(debug_assertions))]
+    state_cookie.set_secure(true);
     state_cookie.set_max_age(Some(max_age));
 
     cookies.private(&state.cookie_key).add(nonce_cookie);
@@ -216,6 +220,8 @@ async fn callback(
                             session_cookie.set_path("/");
                             session_cookie.set_http_only(true);
                             session_cookie.set_same_site(SameSite::Lax);
+                            #[cfg(not(debug_assertions))]
+                            session_cookie.set_secure(true);
                             session_cookie.set_max_age(Some(
                                 time::Duration::hours(24).try_into().unwrap_or_else(|_| {
                                     time::Duration::seconds(86400).try_into().unwrap()
@@ -311,6 +317,8 @@ pub async fn csrf_layer(cookies: Cookies, request: axum::extract::Request, next:
         cookie.set_path("/");
         cookie.set_http_only(false); // フロントエンドから読み取れるようにする
         cookie.set_same_site(SameSite::Lax);
+        #[cfg(not(debug_assertions))]
+        cookie.set_secure(true);
         cookies.add(cookie);
         new_token
     };
