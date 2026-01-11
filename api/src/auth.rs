@@ -110,7 +110,7 @@ pub async fn async_http_client(
 #[derive(Debug, Deserialize)]
 struct AuthRequest {
     code: String,
-    state: String, // unused but required by OIDC params
+    state: String,
 }
 
 /// 認証ミドルウェア: セッションCookieがない場合は 401 Unauthorized を返す
@@ -242,8 +242,8 @@ async fn callback(
                             delete_cookie.set_name(STATE_COOKIE_NAME);
                             cookies.private(&state.cookie_key).remove(delete_cookie);
 
-                            let frontend_url =
-                                std::env::var("FRONTEND_URL").unwrap_or_else(|_| "/".to_string());
+                            let frontend_url = std::env::var("FRONTEND_URL")
+                                .unwrap_or_else(|_| "http://localhost:5173".to_string());
                             Redirect::to(&frontend_url)
                         }
                         Err(e) => {
