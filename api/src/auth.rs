@@ -21,6 +21,7 @@ use std::time::Duration;
 
 use crate::AppState;
 
+const NONCE_COOKIE_NAME: &str = "auth_nonce";
 const SESSION_COOKIE_NAME: &str = "session";
 
 pub fn auth_router() -> Router<Arc<AppState>> {
@@ -120,20 +121,20 @@ struct UserInfo {
     email: Option<String>,
 }
 
-/// 認証ミドルウェア: セッションCookieがない場合は /login へリダイレクト
+/// 認証ミドルウェア: セッションCookieがない場合は 401 Unauthorized を返す
 pub async fn require_auth(jar: CookieJar, request: Request<Body>, next: Next) -> Response {
     // セッションCookieが存在するか確認
     if jar.get(SESSION_COOKIE_NAME).is_some() {
         next.run(request).await
     } else {
-        Redirect::to("/login").into_response()
+        (axum::http::StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
     }
 }
 
-async fn login(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn login(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let client = &state.oidc_client;
 
-    let (auth_url, _csrf_token, _nonce) = client
+    let (auth_url, _csrf_token, nonce) = client
         .authorize_url(
             AuthenticationFlow::<CoreResponseType>::AuthorizationCode,
             CsrfToken::new_random,
@@ -142,11 +143,17 @@ async fn login(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .add_scope(Scope::new("openid".to_string()))
         .add_scope(Scope::new("profile".to_string()))
         .add_scope(Scope::new("email".to_string()))
+        .add_extra_param("prompt", "login")
         .url();
 
-    // In a real app, store csrf_token and nonce...
+    let nonce_cookie = Cookie::build((NONCE_COOKIE_NAME, nonce.secret().to_string()))
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(time::Duration::minutes(10))
+        .build();
 
-    Redirect::to(auth_url.as_str())
+    (jar.add(nonce_cookie), Redirect::to(auth_url.as_str()))
 }
 
 async fn callback(
@@ -155,6 +162,12 @@ async fn callback(
     Query(params): Query<AuthRequest>,
 ) -> impl IntoResponse {
     let client = &state.oidc_client;
+
+    let nonce_str = if let Some(cookie) = jar.get(NONCE_COOKIE_NAME) {
+        cookie.value().to_string()
+    } else {
+        return (jar, Redirect::to("/login?error=missing_nonce")).into_response();
+    };
 
     let token_response = client
         .exchange_code(AuthorizationCode::new(params.code))
@@ -166,34 +179,67 @@ async fn callback(
             let id_token = token_response.id_token();
             match id_token {
                 Some(id_token) => {
-                    let claims = id_token.claims(&client.id_token_verifier(), &Nonce::new_random());
-                    println!("User login: {:?}", claims);
+                    let nonce = Nonce::new(nonce_str);
+                    let claims = id_token.claims(&client.id_token_verifier(), &nonce);
 
-                    // セッションCookieを設定
-                    let session_cookie = Cookie::build((SESSION_COOKIE_NAME, "authenticated"))
-                        .path("/")
-                        .http_only(true)
-                        .same_site(SameSite::Lax)
-                        .max_age(time::Duration::hours(24))
-                        .build();
+                    match claims {
+                        Ok(claims) => {
+                            println!("User login: {:?}", claims);
 
-                    (jar.add(session_cookie), Redirect::to("/"))
+                            // セッションCookieを設定
+                            let session_cookie =
+                                Cookie::build((SESSION_COOKIE_NAME, "authenticated"))
+                                    .path("/")
+                                    .http_only(true)
+                                    .same_site(SameSite::Lax)
+                                    .max_age(time::Duration::hours(24))
+                                    .build();
+
+                            // Nonceクッキーを削除
+                            let nonce_cookie = Cookie::build((NONCE_COOKIE_NAME, ""))
+                                .path("/")
+                                .max_age(time::Duration::seconds(0))
+                                .build();
+
+                            (jar.add(session_cookie).add(nonce_cookie), Redirect::to("/"))
+                                .into_response()
+                        }
+                        Err(e) => {
+                            println!("User login: Err({:?})", e);
+                            (jar, Redirect::to("/login?error=invalid_token")).into_response()
+                        }
+                    }
                 }
-                None => (jar, Redirect::to("/login?error=no_id_token")),
+                None => (jar, Redirect::to("/login?error=no_id_token")).into_response(),
             }
         }
         Err(e) => {
             println!("Token exchange failed: {:?}", e);
-            (jar, Redirect::to("/login?error=token_exchange_failed"))
+            (jar, Redirect::to("/login?error=token_exchange_failed")).into_response()
         }
     }
 }
 
-/// ログアウト: セッションCookieを削除
+/// ログアウト: セッションCookieを削除し、Keycloakからもログアウトする
 pub async fn logout(jar: CookieJar) -> impl IntoResponse {
     let cookie = Cookie::build((SESSION_COOKIE_NAME, ""))
         .path("/")
         .max_age(time::Duration::seconds(0))
         .build();
-    (jar.remove(cookie), Redirect::to("/login"))
+
+    // Keycloak logout logic
+    let client_id = std::env::var("OIDC_CLIENT_ID").unwrap_or("rust_web".to_string());
+    let issuer = std::env::var("OIDC_ISSUER_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/realms/rust-web-realm".to_string());
+
+    // Construct Keycloak logout URL directly
+    let mut url =
+        openidconnect::url::Url::parse(&format!("{}/protocol/openid-connect/logout", issuer))
+            .expect("Failed to parse logout url");
+
+    url.query_pairs_mut()
+        .append_pair("post_logout_redirect_uri", "http://localhost:3000/login")
+        .append_pair("client_id", &client_id);
+
+    (jar.remove(cookie), Redirect::to(url.as_str()))
 }

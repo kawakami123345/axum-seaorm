@@ -3,6 +3,10 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 const MainLayout = () => {
     const location = useLocation();
 
+    const handleLogout = () => {
+        window.location.href = '/api/logout';
+    };
+
     const navItems = [
         { name: 'ダッシュボード', path: '/dashboard' },
         { name: 'ライブラリ', path: '/library' },
@@ -52,6 +56,13 @@ const MainLayout = () => {
                         <div className="flex items-center gap-4 border-l border-gray-200 dark:border-gray-700 pl-4">
                             <button className="text-text-sub hover:text-primary transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                                 <span className="material-symbols-outlined">notifications</span>
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="text-text-sub hover:text-primary transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                title="Logout"
+                            >
+                                <span className="material-symbols-outlined">logout</span>
                             </button>
                             <div className="size-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 dark:border-gray-600">
                                 <div

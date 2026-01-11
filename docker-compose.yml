@@ -11,15 +11,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  kanidm:
-    image: kanidm/server:latest
-    container_name: kanidm
-    restart: unless-stopped
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
-      - "8443:8443"
-      - "3636:3636"
-    volumes:
-      - ./kanidm/data:/data
+      - "8080:8080"
 
 volumes:
   postgres_data:
