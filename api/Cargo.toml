@@ -16,6 +16,8 @@ utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true }
 openidconnect = { workspace = true }
 axum-extra = { workspace = true }
+tower-cookies = { workspace = true }
+
 anyhow = { workspace = true }
 reqwest = "0.12"
 time = "0.3.44"

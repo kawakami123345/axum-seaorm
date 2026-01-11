@@ -33,20 +33,26 @@ async fn main() -> anyhow::Result<()> {
     // OIDC Client
     let oidc_client = api::auth::create_oidc_client().await?;
 
+    let cookie_key = tower_cookies::Key::generate();
+
     let state = Arc::new(AppState {
         book_usecase,
         publisher_usecase,
         shop_usecase,
         dashboard_usecase,
         oidc_client,
+        cookie_key,
     });
 
     // 4. Start Server
-    let key = axum_extra::extract::cookie::Key::generate();
-    let router = create_router(state).layer(axum::Extension(key));
+    let router = create_router(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    println!("Server running on http://localhost:3000");
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+
+    let app_url = std::env::var("APP_URL").unwrap_or_else(|_| format!("http://localhost:{}", port));
+    println!("Server running on {}", app_url);
 
     axum::serve(listener, router).await?;
 

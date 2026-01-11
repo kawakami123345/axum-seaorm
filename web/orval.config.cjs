@@ -10,7 +10,10 @@ module.exports = {
             schemas: 'src/api/model',
             client: 'react-query',
             httpClient: 'fetch',
-            baseUrl: '/api',
+            mutator: {
+                path: './src/api/custom-fetch.ts',
+                name: 'customFetch',
+            },
         },
     },
 };

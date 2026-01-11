@@ -7,6 +7,7 @@ pub mod shop;
 
 use axum::Router;
 use std::sync::Arc;
+use tower_cookies::{CookieManagerLayer, Key};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub shop_usecase: usecase::shop::Service,
     pub dashboard_usecase: usecase::dashboard::Service,
     pub oidc_client: openidconnect::core::CoreClient,
+    pub cookie_key: tower_cookies::Key,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -54,15 +56,29 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     }
 
     // 認証が必要なルート
-    let protected_routes = api_router.layer(axum::middleware::from_fn(auth::require_auth));
+    let protected_routes = api_router.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth::require_auth,
+    ));
 
     // 認証不要のルート (login, callback, logout, swagger-ui)
     let public_routes = Router::new()
         .merge(auth::auth_router())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api));
 
+    // Cookie Key (64 bytes for private cookies)
+    let cookie_key = std::env::var("COOKIE_KEY")
+        .map(|s| Key::from(s.as_bytes()))
+        .unwrap_or_else(|_| Key::generate());
+
+    // NOTE: AppState should already have this key if created in main.rs
+    // But for the router's sake, we might need to ensure consistency if it's recreated.
+    // However, create_router takes state: Arc<AppState> as argument.
+
     protected_routes
         .merge(public_routes)
+        .layer(axum::middleware::from_fn(auth::csrf_layer))
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(CookieManagerLayer::new())
         .with_state(state)
 }

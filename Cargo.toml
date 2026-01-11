@@ -31,6 +31,8 @@ migration = { workspace = true }
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 openidconnect = { workspace = true }
 axum-extra = { workspace = true }
+tower-cookies = { workspace = true }
+
 
 [dev-dependencies]
 rstest = { workspace = true }
@@ -78,3 +80,4 @@ sea-orm-migration = { version = "2.0.0-rc", features = [
 chrono = { version = "0.4", features = ["serde"] }
 openidconnect = { version = "3", features = ["reqwest"] }
 axum-extra = { version = "0.10", features = ["cookie", "cookie-signed"] }
+tower-cookies = { version = "0.11", features = ["private"] }
