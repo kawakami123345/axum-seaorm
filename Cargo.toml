@@ -80,7 +80,8 @@ sea-orm-migration = { version = "2.0.0-rc", features = [
 ] }
 chrono = { version = "0.4", features = ["serde"] }
 openidconnect = { version = "3", features = ["reqwest"] }
-axum-extra = { version = "0.10", features = ["cookie", "cookie-signed"] }
+axum-extra = { version = "0.12", features = ["cookie", "cookie-signed"] }
 tower-cookies = { version = "0.11", features = ["private"] }
 reqwest = "0.12"
 tracing = "0.1"
+base64 = "0.22.1"

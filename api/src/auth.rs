@@ -9,13 +9,14 @@ use axum::{
 
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 
+use base64::Engine;
 use openidconnect::{
     AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, HttpRequest,
     HttpResponse, IssuerUrl, Nonce, RedirectUrl, Scope, TokenResponse,
     core::{CoreClient, CoreProviderMetadata, CoreResponseType},
     reqwest::Error as OidcReqwestError,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -113,23 +114,33 @@ struct AuthRequest {
     state: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct RoleClaims {
+    #[serde(default)]
+    roles: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UserSession {
+    pub sub: String,
+    pub roles: Vec<String>,
+}
+
 /// 認証ミドルウェア: セッションCookieがない場合は 401 Unauthorized を返す
 pub async fn require_auth(
     State(state): State<Arc<AppState>>,
     cookies: Cookies,
-    request: axum::extract::Request,
+    mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
     // セッションCookieが存在するか確認
-    if cookies
-        .private(&state.cookie_key)
-        .get(SESSION_COOKIE_NAME)
-        .is_some()
-    {
-        next.run(request).await
-    } else {
-        (axum::http::StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+    if let Some(cookie) = cookies.private(&state.cookie_key).get(SESSION_COOKIE_NAME) {
+        if let Ok(session) = serde_json::from_str::<UserSession>(cookie.value()) {
+            request.extensions_mut().insert(session);
+            return next.run(request).await;
+        }
     }
+    (axum::http::StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
 }
 
 async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl IntoResponse {
@@ -196,10 +207,9 @@ async fn callback(
         return Redirect::to("/login?error=invalid_state");
     }
 
-    let http_client = &state.http_client;
     let token_response = client
         .exchange_code(AuthorizationCode::new(params.code))
-        .request_async(|req| async_http_client(http_client, req))
+        .request_async(openidconnect::reqwest::async_http_client)
         .await;
 
     match token_response {
@@ -215,8 +225,20 @@ async fn callback(
                             let sub = claims.subject().to_string();
                             info!(sub = %sub, "User login successful");
 
-                            // セッションCookieを設定
-                            let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, sub);
+                            // rolesの取得ロジック
+                            let roles = if let Ok(id_token_str) = serde_json::to_string(id_token) {
+                                extract_roles(&id_token_str)
+                            } else {
+                                vec![]
+                            };
+
+                            let user_session = UserSession {
+                                sub: sub.clone(),
+                                roles,
+                            };
+                            let session_json = serde_json::to_string(&user_session).unwrap();
+
+                            let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
                             session_cookie.set_path("/");
                             session_cookie.set_http_only(true);
                             session_cookie.set_same_site(SameSite::Lax);
@@ -340,4 +362,28 @@ pub async fn csrf_layer(cookies: Cookies, request: axum::extract::Request, next:
     }
 
     next.run(request).await
+}
+
+fn extract_roles(id_token_str: &str) -> Vec<String> {
+    // 前後の引用符を外す (JSON文字列として来る可能性があるため)
+    let jwt_str = id_token_str.trim_matches('"');
+    let parts: Vec<&str> = jwt_str.split('.').collect();
+    if parts.len() != 3 {
+        return vec![];
+    }
+    let payload = parts[1];
+
+    // Base64デコード
+    // URL_SAFE_NO_PAD を優先するが、失敗した場合は URL_SAFE (パディングあり) を試す
+    let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let decoded = engine
+        .decode(payload)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(payload))
+        .unwrap_or_default();
+
+    if let Ok(claims) = serde_json::from_slice::<RoleClaims>(&decoded) {
+        claims.roles
+    } else {
+        vec![]
+    }
 }
