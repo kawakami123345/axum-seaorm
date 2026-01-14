@@ -11,10 +11,10 @@ use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 
 use base64::Engine;
 use openidconnect::{
-    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, HttpRequest,
-    HttpResponse, IssuerUrl, Nonce, RedirectUrl, Scope, TokenResponse,
+    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet,
+    EndpointNotSet, EndpointSet, HttpRequest, HttpResponse, IssuerUrl, Nonce, RedirectUrl, Scope,
+    TokenResponse,
     core::{CoreClient, CoreProviderMetadata, CoreResponseType},
-    reqwest::Error as OidcReqwestError,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -28,6 +28,15 @@ const SESSION_COOKIE_NAME: &str = "session";
 const CSRF_COOKIE_NAME: &str = "csrf_token";
 const CSRF_HEADER_NAME: &str = "X-CSRF-Token";
 
+pub type CustomOidcClient = CoreClient<
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
+
 pub fn auth_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/login", get(login))
@@ -35,7 +44,9 @@ pub fn auth_router() -> Router<Arc<AppState>> {
         .route("/logout", get(logout))
 }
 
-pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result<CoreClient> {
+pub async fn create_oidc_client(
+    http_client: &reqwest::Client,
+) -> anyhow::Result<CustomOidcClient> {
     let client_id =
         ClientId::new(std::env::var("OIDC_CLIENT_ID").context("OIDC_CLIENT_ID must be set")?);
     let client_secret = ClientSecret::new(
@@ -44,11 +55,12 @@ pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result
     let issuer_url =
         IssuerUrl::new(std::env::var("OIDC_ISSUER_URL").context("OIDC_ISSUER_URL must be set")?)?;
 
-    // Use custom http client to handle reqwest version mismatch
-    let provider_metadata =
-        CoreProviderMetadata::discover_async(issuer_url, |req| async_http_client(http_client, req))
-            .await
-            .context("Failed to discover OIDC provider metadata")?;
+    let provider_metadata = CoreProviderMetadata::discover_async(
+        issuer_url,
+        http_client,
+    )
+    .await
+    .context("Failed to discover OIDC provider metadata")?;
 
     let app_url = std::env::var("APP_URL").context("APP_URL must be set")?;
     let redirect_url = format!("{}/callback", app_url);
@@ -60,52 +72,28 @@ pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result
     Ok(client)
 }
 
-// Custom HTTP client that handles conversion between http 0.2 (openidconnect) and http 1.0 (reqwest 0.12)
 pub async fn async_http_client(
     client: &reqwest::Client,
     request: HttpRequest,
-) -> Result<HttpResponse, OidcReqwestError<reqwest::Error>> {
-    // Convert Method (http 0.2 -> 1.0 via string)
-    let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
-        .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
+) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let (parts, body) = request.into_parts();
+    let url = parts.uri.to_string();
 
-    // Convert URL to string to avoid version mismatch
-    let url = request.url.to_string();
+    let mut builder = client.request(parts.method, url);
+    builder = builder.headers(parts.headers);
+    builder = builder.body(body);
 
-    let mut builder = client.request(method, url).body(request.body);
+    let response = builder.send().await?;
 
-    for (name, value) in &request.headers {
-        if let Ok(n) = name.as_str().parse::<reqwest::header::HeaderName>() {
-            builder = builder.header(n, value.as_bytes());
-        }
-    }
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = response.bytes().await?.to_vec();
 
-    let response = builder.send().await.map_err(OidcReqwestError::Reqwest)?;
+    let mut resp = HttpResponse::new(body);
+    *resp.status_mut() = status;
+    *resp.headers_mut() = headers;
 
-    let status_u16 = response.status().as_u16();
-    let status_code = openidconnect::http::StatusCode::from_u16(status_u16)
-        .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
-
-    let mut headers = openidconnect::http::HeaderMap::new();
-    for (name, value) in response.headers() {
-        if let Ok(n) = openidconnect::http::HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = openidconnect::http::HeaderValue::from_bytes(value.as_bytes()) {
-                headers.append(n, v);
-            }
-        }
-    }
-
-    let body = response
-        .bytes()
-        .await
-        .map_err(OidcReqwestError::Reqwest)?
-        .to_vec();
-
-    Ok(HttpResponse {
-        status_code,
-        headers,
-        body,
-    })
+    Ok(resp)
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,31 +174,36 @@ async fn callback(
     State(state): State<Arc<AppState>>,
     cookies: Cookies,
     Query(params): Query<AuthRequest>,
-) -> impl IntoResponse {
+) -> Response {
     let client = &state.oidc_client;
 
     let nonce_str = if let Some(cookie) = cookies.private(&state.cookie_key).get(NONCE_COOKIE_NAME)
     {
         cookie.value().to_string()
     } else {
-        return Redirect::to("/login?error=missing_nonce");
+        return Redirect::to("/login?error=missing_nonce").into_response();
     };
 
     let state_str = if let Some(cookie) = cookies.private(&state.cookie_key).get(STATE_COOKIE_NAME)
     {
         cookie.value().to_string()
     } else {
-        return Redirect::to("/login?error=missing_state");
+        return Redirect::to("/login?error=missing_state").into_response();
     };
 
     if params.state != state_str {
-        return Redirect::to("/login?error=invalid_state");
+        return Redirect::to("/login?error=invalid_state").into_response();
     }
 
-    let token_response = client
-        .exchange_code(AuthorizationCode::new(params.code))
-        .request_async(openidconnect::reqwest::async_http_client)
-        .await;
+    let http_client = &state.http_client;
+
+    let token_response = match client.exchange_code(AuthorizationCode::new(params.code)) {
+        Ok(request) => request.request_async(http_client).await,
+        Err(e) => {
+            error!(error = ?e, "Failed to create token exchange request");
+            return Redirect::to("/login?error=token_exchange_request_failed").into_response();
+        }
+    };
 
     match token_response {
         Ok(token_response) => {
@@ -266,20 +259,20 @@ async fn callback(
 
                             let frontend_url = std::env::var("FRONTEND_URL")
                                 .unwrap_or_else(|_| "http://localhost:5173".to_string());
-                            Redirect::to(&frontend_url)
+                            Redirect::to(&frontend_url).into_response()
                         }
                         Err(e) => {
                             error!(error = ?e, "ID token validation failed");
-                            Redirect::to("/login?error=invalid_token")
+                            Redirect::to("/login?error=invalid_token").into_response()
                         }
                     }
                 }
-                None => Redirect::to("/login?error=no_id_token"),
+                None => Redirect::to("/login?error=no_id_token").into_response(),
             }
         }
         Err(e) => {
             error!(error = ?e, "Token exchange failed");
-            Redirect::to("/login?error=token_exchange_failed")
+            Redirect::to("/login?error=token_exchange_failed").into_response()
         }
     }
 }
