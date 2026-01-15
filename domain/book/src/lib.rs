@@ -104,17 +104,17 @@ impl Book {
     pub fn pub_id(&self) -> uuid::Uuid {
         self.pub_id
     }
-    pub fn title(&self) -> String {
-        self.title.value().to_string()
+    pub fn title(&self) -> &str {
+        self.title.value()
     }
-    pub fn author(&self) -> String {
-        self.author.value().to_string()
+    pub fn author(&self) -> &str {
+        self.author.value()
     }
-    pub fn publisher(&self) -> publisher::Publisher {
-        self.publisher.clone()
+    pub fn publisher(&self) -> &publisher::Publisher {
+        &self.publisher
     }
-    pub fn shop(&self) -> Option<shop::Shop> {
-        self.shop.clone()
+    pub fn shop(&self) -> &Option<shop::Shop> {
+        &self.shop
     }
     pub fn applied_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
         self.applied_at
@@ -131,14 +131,14 @@ impl Book {
     pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
     }
-    pub fn created_by(&self) -> String {
-        self.created_by.clone()
+    pub fn created_by(&self) -> &str {
+        &self.created_by
     }
-    pub fn updated_by(&self) -> String {
-        self.updated_by.clone()
+    pub fn updated_by(&self) -> &str {
+        &self.updated_by
     }
-    pub fn user_id(&self) -> String {
-        self.user_id.clone()
+    pub fn user_id(&self) -> &str {
+        &self.user_id
     }
 
     fn update_audit(&mut self, updated_by: String) {

@@ -23,19 +23,27 @@ impl Service {
         }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
+    pub async fn get_all(
+        &self,
+        ctx: &crate::UserContext,
+    ) -> Result<Vec<ResponseDto>, UseCaseError> {
         let books = self
             .repo
             .find_all()
             .await
             .map_err(|_| UseCaseError::DatabaseError)?;
 
-        let response_dtos = books.into_iter().map(ResponseDto::from).collect();
+        let response_dtos = books
+            .into_iter()
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .map(ResponseDto::from)
+            .collect();
         Ok(response_dtos)
     }
 
     pub async fn get_year_applied_books(
         &self,
+        ctx: &crate::UserContext,
         year: i32,
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
         let books = self
@@ -47,11 +55,8 @@ impl Service {
         let response_dtos = books
             .into_iter()
             .filter(|b| {
-                if let Some(applied_at) = b.applied_at() {
-                    applied_at.year() == year
-                } else {
-                    false
-                }
+                (ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+                    && b.applied_at().map_or(false, |at| at.year() == year)
             })
             .map(ResponseDto::from)
             .collect();
@@ -59,21 +64,27 @@ impl Service {
         Ok(response_dtos)
     }
 
-    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(
+        &self,
+        ctx: &crate::UserContext,
+        pub_id: uuid::Uuid,
+    ) -> Result<ResponseDto, UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
             .map_err(|_| UseCaseError::DatabaseError)?
-            .ok_or(UseCaseError::NotFound(format!(
-                "Book with pub_id = {}",
-                pub_id
-            )))?;
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .ok_or(UseCaseError::NotFound("Book not found".into()))?;
 
         Ok(book.into())
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(
+        &self,
+        ctx: &crate::UserContext,
+        dto: CreateDto,
+    ) -> Result<ResponseDto, UseCaseError> {
         let title = book::vo::BookTitle::new(dto.title)?;
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
@@ -87,22 +98,17 @@ impl Service {
             .find_by_pub_id(dto.publisher_id)
             .await
             .map_err(|_| UseCaseError::DatabaseError)?
-            .ok_or(UseCaseError::NotFound(format!(
-                "Publisher with pub_id = {} not found",
-                dto.publisher_id
-            )))?;
+            .ok_or(UseCaseError::DomainRuleViolation(
+                "Publisher not found".into(),
+            ))?;
 
         let shop = if let Some(shop_id) = dto.shop_id {
-            Some(
-                self.shop_repo
-                    .find_by_pub_id(shop_id)
-                    .await
-                    .map_err(|_| UseCaseError::DatabaseError)?
-                    .ok_or(UseCaseError::NotFound(format!(
-                        "Shop with pub_id = {} not found",
-                        shop_id
-                    )))?,
-            )
+            self.shop_repo
+                .find_by_pub_id(shop_id)
+                .await
+                .map_err(|_| UseCaseError::DatabaseError)?
+                .ok_or(UseCaseError::DomainRuleViolation("Shop not found".into()))
+                .map(Some)?
         } else {
             None
         };
@@ -115,8 +121,8 @@ impl Service {
             shop,
             format,
             price,
-            "test player".to_string(),
-            "test player".to_string(),
+            ctx.user_id.clone(),
+            ctx.user_id.clone(),
         );
         self.repo
             .create(book.clone())
@@ -128,6 +134,7 @@ impl Service {
 
     pub async fn update(
         &self,
+        ctx: &crate::UserContext,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
     ) -> Result<ResponseDto, UseCaseError> {
@@ -144,6 +151,7 @@ impl Service {
             .find_by_pub_id(pub_id)
             .await
             .map_err(|_| UseCaseError::DatabaseError)?
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
         // Resolve Publisher
@@ -152,12 +160,11 @@ impl Service {
                 .find_by_pub_id(dto.publisher_id)
                 .await
                 .map_err(|_| UseCaseError::DatabaseError)?
-                .ok_or(UseCaseError::NotFound(format!(
-                    "Publisher with pub_id = {} not found",
-                    dto.publisher_id
-                )))?
+                .ok_or(UseCaseError::DomainRuleViolation(
+                    "Publisher not found".to_string(),
+                ))?
         } else {
-            book.publisher()
+            book.publisher().clone()
         };
 
         // Resolve Shop
@@ -167,10 +174,9 @@ impl Service {
                     .find_by_pub_id(shop_id)
                     .await
                     .map_err(|_| UseCaseError::DatabaseError)?
-                    .ok_or(UseCaseError::NotFound(format!(
-                        "Shop with pub_id = {} not found",
-                        shop_id
-                    )))?,
+                    .ok_or(UseCaseError::DomainRuleViolation(
+                        "Shop not found".to_string(),
+                    ))?,
             )
         } else {
             None
@@ -183,7 +189,7 @@ impl Service {
             shop,
             format,
             price,
-            "test player".to_string(),
+            ctx.user_id.clone(),
         )
         .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
@@ -195,16 +201,18 @@ impl Service {
         Ok(book.into())
     }
 
-    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(
+        &self,
+        ctx: &crate::UserContext,
+        pub_id: uuid::Uuid,
+    ) -> Result<(), UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
             .map_err(|_| UseCaseError::DatabaseError)?
-            .ok_or(UseCaseError::NotFound(format!(
-                "Book with pub_id = {} not found",
-                pub_id
-            )))?;
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
         self.repo
             .delete(book)
@@ -214,6 +222,7 @@ impl Service {
     }
     pub async fn change_applied_at(
         &self,
+        ctx: &crate::UserContext,
         pub_id: uuid::Uuid,
         dto: ChangeAppliedAtDto,
     ) -> Result<ResponseDto, UseCaseError> {
@@ -222,12 +231,10 @@ impl Service {
             .find_by_pub_id(pub_id)
             .await
             .map_err(|_| UseCaseError::DatabaseError)?
-            .ok_or(UseCaseError::NotFound(format!(
-                "Book with pub_id = {} not found",
-                pub_id
-            )))?;
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        book.change_applied_at(dto.applied_at, "test player".to_string())
+        book.change_applied_at(dto.applied_at, ctx.user_id.clone())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo
@@ -289,15 +296,15 @@ impl From<book::Book> for ResponseDto {
     fn from(book: book::Book) -> Self {
         Self {
             pub_id: book.pub_id(),
-            title: book.title(),
-            author: book.author(),
+            title: book.title().to_string(),
+            author: book.author().to_string(),
             publisher: BookPublisherDto {
                 pub_id: book.publisher().pub_id(),
-                name: book.publisher().name(),
+                name: book.publisher().name().to_string(),
             },
-            shop: book.shop().map(|s| BookShopDto {
+            shop: book.shop().as_ref().map(|s| BookShopDto {
                 pub_id: s.pub_id(),
-                name: s.name(),
+                name: s.name().to_string(),
             }),
             applied_at: book.applied_at(),
             format: book.format().to_string(),
@@ -358,18 +365,18 @@ mod tests {
             let new_book = book::Book::reconstruct(
                 new_id,
                 item.pub_id(),
-                book::vo::BookTitle::new(item.title()).unwrap(),
-                book::vo::BookAuthor::new(item.author()).unwrap(),
-                item.publisher(),
-                item.shop(),
+                book::vo::BookTitle::new(item.title().to_string()).unwrap(),
+                book::vo::BookAuthor::new(item.author().to_string()).unwrap(),
+                item.publisher().clone(),
+                item.shop().clone(),
                 item.applied_at(),
                 item.format(),
                 book::vo::BookPrice::new(item.price()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by(),
-                item.updated_by(),
-                item.user_id(),
+                item.created_by().to_string(),
+                item.updated_by().to_string(),
+                item.user_id().to_string(),
             );
 
             store.push(new_book.clone());
@@ -539,15 +546,19 @@ mod tests {
             price: 1000,
         };
 
+        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
         // Create
-        let created = service.create(dto).await.expect("Failed to create book");
+        let created = service
+            .create(&ctx, dto)
+            .await
+            .expect("Failed to create book");
         assert_eq!(created.title, "Test Book");
         assert_eq!(created.shop.unwrap().pub_id, shop_id);
         assert_eq!(created.format, "Real");
 
         // Get
         let fetched = service
-            .get(created.pub_id)
+            .get(&ctx, created.pub_id)
             .await
             .expect("Failed to get book");
         assert_eq!(fetched.pub_id, created.pub_id);
@@ -575,9 +586,10 @@ mod tests {
             format: None,
             price: 100,
         };
-        service.create(dto).await.expect("Failed to create");
+        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
+        service.create(&ctx, dto).await.expect("Failed to create");
 
-        let all = service.get_all().await.expect("Failed to get all");
+        let all = service.get_all(&ctx).await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
     }
 
@@ -602,12 +614,16 @@ mod tests {
             format: None,
             price: 100,
         };
-        let created = service.create(dto).await.expect("Failed to create book");
+        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
+        let created = service
+            .create(&ctx, dto)
+            .await
+            .expect("Failed to create book");
 
         service
-            .delete(created.pub_id)
+            .delete(&ctx, created.pub_id)
             .await
             .expect("Failed to delete");
-        assert!(service.get(created.pub_id).await.is_err());
+        assert!(service.get(&ctx, created.pub_id).await.is_err());
     }
 }

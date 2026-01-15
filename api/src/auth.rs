@@ -91,12 +91,6 @@ struct RoleClaims {
     roles: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct UserSession {
-    pub sub: String,
-    pub roles: Vec<String>,
-}
-
 /// 認証ミドルウェア: セッションCookieがない場合は 401 Unauthorized を返す
 pub async fn require_auth(
     State(state): State<Arc<AppState>>,
@@ -106,7 +100,7 @@ pub async fn require_auth(
 ) -> Response {
     // セッションCookieが存在するか確認
     if let Some(cookie) = cookies.private(&state.cookie_key).get(SESSION_COOKIE_NAME) {
-        if let Ok(session) = serde_json::from_str::<UserSession>(cookie.value()) {
+        if let Ok(session) = serde_json::from_str::<usecase::UserContext>(cookie.value()) {
             request.extensions_mut().insert(session);
             return next.run(request).await;
         }
@@ -220,10 +214,7 @@ async fn callback(
                                 vec![]
                             };
 
-                            let user_session = UserSession {
-                                sub: sub.clone(),
-                                roles,
-                            };
+                            let user_session = usecase::UserContext::new(sub.clone(), roles);
                             let session_json = serde_json::to_string(&user_session).unwrap();
 
                             let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);

@@ -120,7 +120,7 @@ impl From<shop::Shop> for ResponseDto {
     fn from(s: shop::Shop) -> Self {
         Self {
             pub_id: s.pub_id(),
-            name: s.name(),
+            name: s.name().to_string(),
         }
     }
 }

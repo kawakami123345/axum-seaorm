@@ -64,8 +64,8 @@ impl Publisher {
     pub fn pub_id(&self) -> uuid::Uuid {
         self.pub_id
     }
-    pub fn name(&self) -> String {
-        self.name.value().to_string()
+    pub fn name(&self) -> &str {
+        &self.name.value()
     }
     pub fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.created_at
@@ -73,11 +73,11 @@ impl Publisher {
     pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
     }
-    pub fn created_by(&self) -> String {
-        self.created_by.clone()
+    pub fn created_by(&self) -> &str {
+        &self.created_by
     }
-    pub fn updated_by(&self) -> String {
-        self.updated_by.clone()
+    pub fn updated_by(&self) -> &str {
+        &self.updated_by
     }
 
     fn update_audit(&mut self, updated_by: String) {

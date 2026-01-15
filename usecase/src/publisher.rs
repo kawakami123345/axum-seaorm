@@ -116,7 +116,7 @@ impl From<publisher::Publisher> for ResponseDto {
     fn from(publisher: publisher::Publisher) -> Self {
         Self {
             pub_id: publisher.pub_id(),
-            name: publisher.name(),
+            name: publisher.name().to_string(),
         }
     }
 }
@@ -162,11 +162,11 @@ mod tests {
             let new_publisher = publisher::Publisher::reconstruct(
                 new_id,
                 item.pub_id(),
-                publisher::vo::PublisherName::new(item.name()).unwrap(),
+                publisher::vo::PublisherName::new(item.name().to_string()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by(),
-                item.updated_by(),
+                item.created_by().to_string(),
+                item.updated_by().to_string(),
             );
 
             store.push(new_publisher.clone());
