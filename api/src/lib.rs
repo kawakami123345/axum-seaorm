@@ -21,7 +21,7 @@ pub struct AppState {
     pub publisher_usecase: usecase::publisher::Service,
     pub shop_usecase: usecase::shop::Service,
     pub dashboard_usecase: usecase::dashboard::Service,
-    pub oidc_client: openidconnect::core::CoreClient,
+    pub oidc_client: crate::auth::AppClient,
     pub cookie_key: tower_cookies::Key,
     pub http_client: reqwest::Client,
 }

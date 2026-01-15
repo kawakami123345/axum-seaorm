@@ -10,12 +10,37 @@ use axum::{
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 
 use base64::Engine;
-use openidconnect::{
-    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, HttpRequest,
-    HttpResponse, IssuerUrl, Nonce, RedirectUrl, Scope, TokenResponse,
-    core::{CoreClient, CoreProviderMetadata, CoreResponseType},
-    reqwest::Error as OidcReqwestError,
+use openidconnect::core::{
+    CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
+    CoreJweContentEncryptionAlgorithm, CoreRevocableToken, CoreTokenIntrospectionResponse,
+    CoreTokenResponse,
 };
+use openidconnect::{
+    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    EmptyAdditionalClaims, EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
+    RedirectUrl, RevocationErrorResponseType, Scope, StandardErrorResponse, TokenResponse,
+    core::{CoreClient, CoreProviderMetadata, CoreResponseType},
+};
+
+pub type AppClient = openidconnect::Client<
+    EmptyAdditionalClaims,
+    CoreAuthDisplay,
+    CoreGenderClaim,
+    CoreJweContentEncryptionAlgorithm,
+    CoreJsonWebKey,
+    CoreAuthPrompt,
+    StandardErrorResponse<CoreErrorResponseType>,
+    CoreTokenResponse,
+    CoreTokenIntrospectionResponse,
+    CoreRevocableToken,
+    StandardErrorResponse<RevocationErrorResponseType>,
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -35,7 +60,7 @@ pub fn auth_router() -> Router<Arc<AppState>> {
         .route("/logout", get(logout))
 }
 
-pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result<CoreClient> {
+pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result<AppClient> {
     let client_id =
         ClientId::new(std::env::var("OIDC_CLIENT_ID").context("OIDC_CLIENT_ID must be set")?);
     let client_secret = ClientSecret::new(
@@ -44,68 +69,14 @@ pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result
     let issuer_url =
         IssuerUrl::new(std::env::var("OIDC_ISSUER_URL").context("OIDC_ISSUER_URL must be set")?)?;
 
-    // Use custom http client to handle reqwest version mismatch
-    let provider_metadata =
-        CoreProviderMetadata::discover_async(issuer_url, |req| async_http_client(http_client, req))
-            .await
-            .context("Failed to discover OIDC provider metadata")?;
-
-    let app_url = std::env::var("APP_URL").context("APP_URL must be set")?;
-    let redirect_url = format!("{}/callback", app_url);
+    let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, http_client)
+        .await
+        .context("Failed to discover OIDC provider metadata")?;
 
     let client =
-        CoreClient::from_provider_metadata(provider_metadata, client_id, Some(client_secret))
-            .set_redirect_uri(RedirectUrl::new(redirect_url)?);
+        CoreClient::from_provider_metadata(provider_metadata, client_id, Some(client_secret));
 
     Ok(client)
-}
-
-// Custom HTTP client that handles conversion between http 0.2 (openidconnect) and http 1.0 (reqwest 0.12)
-pub async fn async_http_client(
-    client: &reqwest::Client,
-    request: HttpRequest,
-) -> Result<HttpResponse, OidcReqwestError<reqwest::Error>> {
-    // Convert Method (http 0.2 -> 1.0 via string)
-    let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
-        .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
-
-    // Convert URL to string to avoid version mismatch
-    let url = request.url.to_string();
-
-    let mut builder = client.request(method, url).body(request.body);
-
-    for (name, value) in &request.headers {
-        if let Ok(n) = name.as_str().parse::<reqwest::header::HeaderName>() {
-            builder = builder.header(n, value.as_bytes());
-        }
-    }
-
-    let response = builder.send().await.map_err(OidcReqwestError::Reqwest)?;
-
-    let status_u16 = response.status().as_u16();
-    let status_code = openidconnect::http::StatusCode::from_u16(status_u16)
-        .map_err(|e| OidcReqwestError::Other(e.to_string()))?;
-
-    let mut headers = openidconnect::http::HeaderMap::new();
-    for (name, value) in response.headers() {
-        if let Ok(n) = openidconnect::http::HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = openidconnect::http::HeaderValue::from_bytes(value.as_bytes()) {
-                headers.append(n, v);
-            }
-        }
-    }
-
-    let body = response
-        .bytes()
-        .await
-        .map_err(OidcReqwestError::Reqwest)?
-        .to_vec();
-
-    Ok(HttpResponse {
-        status_code,
-        headers,
-        body,
-    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +116,12 @@ pub async fn require_auth(
 
 async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl IntoResponse {
     let client = &state.oidc_client;
+
+    let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
+    let redirect_url =
+        RedirectUrl::new(format!("{}/callback", app_url)).expect("Invalid redirect URL");
+
+    let client = client.clone().set_redirect_uri(redirect_url);
 
     let (auth_url, csrf_token, nonce) = client
         .authorize_url(
@@ -207,10 +184,21 @@ async fn callback(
         return Redirect::to("/login?error=invalid_state");
     }
 
-    let token_response = client
-        .exchange_code(AuthorizationCode::new(params.code))
-        .request_async(openidconnect::reqwest::async_http_client)
-        .await;
+    let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
+    let redirect_url =
+        RedirectUrl::new(format!("{}/callback", app_url)).expect("Invalid redirect URL");
+
+    let client = client.clone().set_redirect_uri(redirect_url);
+
+    let token_request = match client.exchange_code(AuthorizationCode::new(params.code)) {
+        Ok(r) => r,
+        Err(e) => {
+            error!(error = ?e, "Failed to create token request");
+            return Redirect::to("/login?error=internal_configuration_error");
+        }
+    };
+
+    let token_response = token_request.request_async(&state.http_client).await;
 
     match token_response {
         Ok(token_response) => {
