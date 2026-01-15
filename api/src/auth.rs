@@ -41,7 +41,7 @@ pub type AppClient = openidconnect::Client<
     EndpointMaybeSet,
     EndpointMaybeSet,
 >;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{error, info};
 

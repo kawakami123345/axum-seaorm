@@ -203,16 +203,16 @@ impl book::Repository for SqlRepository {
             pub_id: Set(item.pub_id()),
             publisher_id: Set(publisher_model.id),
             shop_id: Set(shop_model.as_ref().map(|s| s.id)),
-            title: Set(item.title()),
-            author: Set(item.author()),
+            title: Set(item.title().to_string()),
+            author: Set(item.author().to_string()),
             price: Set(item.price()),
             applied_at: Set(item.applied_at()),
             format: Set(item.format().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by()),
-            updated_by: Set(item.updated_by()),
-            user_id: Set(item.user_id()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
+            user_id: Set(item.user_id().to_string()),
             ..Default::default()
         };
         let result = active_model.insert(&self.db).await?;
@@ -243,16 +243,16 @@ impl book::Repository for SqlRepository {
             pub_id: Set(item.pub_id()),
             publisher_id: Set(publisher_model.id),
             shop_id: Set(shop_model.as_ref().map(|s| s.id)),
-            title: Set(item.title()),
-            author: Set(item.author()),
+            title: Set(item.title().to_string()),
+            author: Set(item.author().to_string()),
             price: Set(item.price()),
             applied_at: Set(item.applied_at()),
             format: Set(item.format().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by()),
-            updated_by: Set(item.updated_by()),
-            user_id: Set(item.user_id()),
+            created_by: Set(item.created_by().to_string()),
+            updated_by: Set(item.updated_by().to_string()),
+            user_id: Set(item.user_id().to_string()),
         };
         let result = active_model.update(&self.db).await?;
 
