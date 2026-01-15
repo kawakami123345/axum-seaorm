@@ -1,4 +1,4 @@
-use crate::error::UseCaseError;
+use crate::{UserContext, error::UseCaseError};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -23,19 +23,15 @@ impl Service {
         }
     }
 
-    pub async fn get_all(
-        &self,
-        ctx: &crate::UserContext,
-    ) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let books = self
-            .repo
-            .find_all()
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+    pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let books = self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         let response_dtos = books
             .into_iter()
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .map(ResponseDto::from)
             .collect();
         Ok(response_dtos)
@@ -43,19 +39,18 @@ impl Service {
 
     pub async fn get_year_applied_books(
         &self,
-        ctx: &crate::UserContext,
+        ctx: &UserContext,
         year: i32,
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let books = self
-            .repo
-            .find_all()
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let books = self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         let response_dtos = books
             .into_iter()
             .filter(|b| {
-                (ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+                (ctx.is_admin() || b.user_id() == ctx.user_id())
                     && b.applied_at().map_or(false, |at| at.year() == year)
             })
             .map(ResponseDto::from)
@@ -66,15 +61,18 @@ impl Service {
 
     pub async fn get(
         &self,
-        ctx: &crate::UserContext,
+        ctx: &UserContext,
         pub_id: uuid::Uuid,
     ) -> Result<ResponseDto, UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".into()))?;
 
         Ok(book.into())
@@ -82,7 +80,7 @@ impl Service {
 
     pub async fn create(
         &self,
-        ctx: &crate::UserContext,
+        ctx: &UserContext,
         dto: CreateDto,
     ) -> Result<ResponseDto, UseCaseError> {
         let title = book::vo::BookTitle::new(dto.title)?;
@@ -140,7 +138,7 @@ impl Service {
 
     pub async fn update(
         &self,
-        ctx: &crate::UserContext,
+        ctx: &UserContext,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
     ) -> Result<ResponseDto, UseCaseError> {
@@ -156,8 +154,11 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
         // Resolve Publisher
@@ -165,7 +166,10 @@ impl Service {
             self.publisher_repo
                 .find_by_pub_id(dto.publisher_id)
                 .await
-                .map_err(|_| UseCaseError::DatabaseError)?
+                .map_err(|e| {
+                    eprintln!("Database error in create book (find publisher): {:?}", e);
+                    UseCaseError::DatabaseError
+                })?
                 .ok_or(UseCaseError::DomainRuleViolation(
                     "Publisher not found".to_string(),
                 ))?
@@ -179,7 +183,10 @@ impl Service {
                 self.shop_repo
                     .find_by_pub_id(shop_id)
                     .await
-                    .map_err(|_| UseCaseError::DatabaseError)?
+                    .map_err(|e| {
+                        eprintln!("Database error in create book (find publisher): {:?}", e);
+                        UseCaseError::DatabaseError
+                    })?
                     .ok_or(UseCaseError::DomainRuleViolation(
                         "Shop not found".to_string(),
                     ))?,
@@ -199,36 +206,35 @@ impl Service {
         )
         .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo
-            .update(book.clone())
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.update(book.clone()).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(book.into())
     }
 
-    pub async fn delete(
-        &self,
-        ctx: &crate::UserContext,
-        pub_id: uuid::Uuid,
-    ) -> Result<(), UseCaseError> {
+    pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
         let book = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        self.repo
-            .delete(book)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.delete(book).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(())
     }
     pub async fn change_applied_at(
         &self,
-        ctx: &crate::UserContext,
+        ctx: &UserContext,
         pub_id: uuid::Uuid,
         dto: ChangeAppliedAtDto,
     ) -> Result<ResponseDto, UseCaseError> {
@@ -236,17 +242,20 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id.as_str())
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
+            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
         book.change_applied_at(dto.applied_at, ctx.user_id.clone())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo
-            .update(book.clone())
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.update(book.clone()).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(book.into())
     }
@@ -338,7 +347,8 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use rstest::*;
-    use std::sync::Mutex;
+    use std::{str::FromStr, sync::Mutex};
+    use uuid::Uuid;
 
     struct FakeRepository {
         store: Arc<Mutex<Vec<book::Book>>>,
@@ -380,9 +390,9 @@ mod tests {
                 book::vo::BookPrice::new(item.price()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by().to_string(),
-                item.updated_by().to_string(),
-                item.user_id().to_string(),
+                item.created_by().clone(),
+                item.updated_by().clone(),
+                item.user_id().clone(),
             );
 
             store.push(new_book.clone());
@@ -510,19 +520,19 @@ mod tests {
         )
     }
 
-    fn create_dummy_publisher(pub_id: uuid::Uuid) -> publisher::Publisher {
+    fn create_dummy_publisher(pub_id: Uuid) -> publisher::Publisher {
         publisher::Publisher::new(
             pub_id,
             publisher::vo::PublisherName::new("Test Publisher".to_string()).unwrap(),
-            "test player".to_string(),
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
         )
     }
 
-    fn create_dummy_shop(pub_id: uuid::Uuid) -> shop::Shop {
+    fn create_dummy_shop(pub_id: Uuid) -> shop::Shop {
         shop::Shop::new(
             pub_id,
             shop::vo::ShopName::new("Test Shop".to_string()).unwrap(),
-            "test player".to_string(),
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
         )
     }
 
@@ -552,7 +562,10 @@ mod tests {
             price: 1000,
         };
 
-        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         // Create
         let created = service
             .create(&ctx, dto)
@@ -592,7 +605,10 @@ mod tests {
             format: None,
             price: 100,
         };
-        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         service.create(&ctx, dto).await.expect("Failed to create");
 
         let all = service.get_all(&ctx).await.expect("Failed to get all");
@@ -620,7 +636,10 @@ mod tests {
             format: None,
             price: 100,
         };
-        let ctx = crate::UserContext::new("user1".to_string(), vec![]);
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let created = service
             .create(&ctx, dto)
             .await

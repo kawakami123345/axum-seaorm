@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 pub mod vo;
 
@@ -20,12 +21,12 @@ pub struct Shop {
     name: vo::ShopName,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
-    created_by: String,
-    updated_by: String,
+    created_by: Uuid,
+    updated_by: Uuid,
 }
 
 impl Shop {
-    pub fn new(pub_id: uuid::Uuid, name: vo::ShopName, created_by: String) -> Self {
+    pub fn new(pub_id: uuid::Uuid, name: vo::ShopName, created_by: Uuid) -> Self {
         let now = chrono::Utc::now();
         Self {
             id: 0,
@@ -33,7 +34,7 @@ impl Shop {
             name,
             created_at: now,
             updated_at: now,
-            created_by: created_by.clone(),
+            created_by: created_by,
             updated_by: created_by,
         }
     }
@@ -44,8 +45,8 @@ impl Shop {
         name: vo::ShopName,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
-        created_by: String,
-        updated_by: String,
+        created_by: Uuid,
+        updated_by: Uuid,
     ) -> Self {
         Self {
             id,
@@ -73,19 +74,19 @@ impl Shop {
     pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
     }
-    pub fn created_by(&self) -> &str {
+    pub fn created_by(&self) -> &Uuid {
         &self.created_by
     }
-    pub fn updated_by(&self) -> &str {
+    pub fn updated_by(&self) -> &Uuid {
         &self.updated_by
     }
 
-    fn update_audit(&mut self, updated_by: String) {
+    fn update_audit(&mut self, updated_by: Uuid) {
         self.updated_at = chrono::Utc::now();
         self.updated_by = updated_by;
     }
 
-    pub fn update(&mut self, name: vo::ShopName, updated_by: String) -> Result<(), DomainError> {
+    pub fn update(&mut self, name: vo::ShopName, updated_by: Uuid) -> Result<(), DomainError> {
         self.name = name;
         self.update_audit(updated_by);
         Ok(())

@@ -1,5 +1,5 @@
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
@@ -21,11 +21,12 @@ use crate::AppState;
 )]
 pub async fn create_shop(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<usecase::UserContext>,
     Json(dto): Json<CreateDto>,
 ) -> Result<impl IntoResponse, StatusCode> {
     state
         .shop_usecase
-        .create(dto)
+        .create(&ctx, dto)
         .await
         .map(|dto| (StatusCode::CREATED, Json(dto)))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
@@ -96,11 +97,12 @@ pub async fn get_shop(
 pub async fn update_shop(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
+    Extension(ctx): Extension<usecase::UserContext>,
     Json(dto): Json<UpdateDto>,
 ) -> Result<impl IntoResponse, StatusCode> {
     state
         .shop_usecase
-        .update(pub_id, dto)
+        .update(&ctx, pub_id, dto)
         .await
         .map(|dto| (StatusCode::OK, Json(dto)))
         .map_err(|e| match e {

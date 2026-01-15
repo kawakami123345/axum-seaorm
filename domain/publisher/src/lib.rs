@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 pub mod vo;
 
 #[async_trait]
 pub trait Repository: Sync + Send {
     async fn find_all(&self) -> anyhow::Result<Vec<Publisher>>;
-    async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<Publisher>>;
+    async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<Publisher>>;
     async fn create(&self, item: Publisher) -> anyhow::Result<Publisher>;
     async fn update(&self, item: Publisher) -> anyhow::Result<Publisher>;
     async fn delete(&self, item: Publisher) -> anyhow::Result<()>;
@@ -16,16 +17,16 @@ pub trait Repository: Sync + Send {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Publisher {
     id: i32,
-    pub_id: uuid::Uuid,
+    pub_id: Uuid,
     name: vo::PublisherName,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
-    created_by: String,
-    updated_by: String,
+    created_by: Uuid,
+    updated_by: Uuid,
 }
 
 impl Publisher {
-    pub fn new(pub_id: uuid::Uuid, name: vo::PublisherName, created_by: String) -> Self {
+    pub fn new(pub_id: Uuid, name: vo::PublisherName, created_by: Uuid) -> Self {
         let now = chrono::Utc::now();
         Self {
             id: 0,
@@ -40,12 +41,12 @@ impl Publisher {
 
     pub fn reconstruct(
         id: i32,
-        pub_id: uuid::Uuid,
+        pub_id: Uuid,
         name: vo::PublisherName,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
-        created_by: String,
-        updated_by: String,
+        created_by: Uuid,
+        updated_by: Uuid,
     ) -> Self {
         Self {
             id,
@@ -61,7 +62,7 @@ impl Publisher {
     pub fn id(&self) -> i32 {
         self.id
     }
-    pub fn pub_id(&self) -> uuid::Uuid {
+    pub fn pub_id(&self) -> Uuid {
         self.pub_id
     }
     pub fn name(&self) -> &str {
@@ -73,23 +74,19 @@ impl Publisher {
     pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
     }
-    pub fn created_by(&self) -> &str {
+    pub fn created_by(&self) -> &Uuid {
         &self.created_by
     }
-    pub fn updated_by(&self) -> &str {
+    pub fn updated_by(&self) -> &Uuid {
         &self.updated_by
     }
 
-    fn update_audit(&mut self, updated_by: String) {
+    fn update_audit(&mut self, updated_by: Uuid) {
         self.updated_at = chrono::Utc::now();
         self.updated_by = updated_by;
     }
 
-    pub fn update(
-        &mut self,
-        name: vo::PublisherName,
-        updated_by: String,
-    ) -> Result<(), DomainError> {
+    pub fn update(&mut self, name: vo::PublisherName, updated_by: Uuid) -> Result<(), DomainError> {
         self.name = name;
         self.update_audit(updated_by);
         Ok(())

@@ -5,15 +5,16 @@ pub mod publisher;
 pub mod shop;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserContext {
-    pub user_id: String,
-    pub roles: Vec<String>,
+    user_id: Uuid,
+    roles: Vec<String>,
 }
 
 impl UserContext {
-    pub fn new(user_id: String, roles: Vec<String>) -> Self {
+    pub fn new(user_id: Uuid, roles: Vec<String>) -> Self {
         Self { user_id, roles }
     }
 
@@ -21,7 +22,7 @@ impl UserContext {
         self.roles.iter().any(|r| r == "admin")
     }
 
-    pub fn user_id(&self) -> &str {
+    pub fn user_id(&self) -> &Uuid {
         &self.user_id
     }
 

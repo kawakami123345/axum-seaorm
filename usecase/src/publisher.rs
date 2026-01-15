@@ -1,7 +1,8 @@
-use crate::error::UseCaseError;
+use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub struct Service {
     repo: Arc<dyn publisher::Repository>,
@@ -13,20 +14,22 @@ impl Service {
     }
 
     pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let publishers = self
-            .repo
-            .find_all()
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let publishers = self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(&self, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
@@ -34,21 +37,24 @@ impl Service {
         Ok(publisher.into())
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(
+        &self,
+        ctx: &UserContext,
+        dto: CreateDto,
+    ) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
-        let publisher =
-            publisher::Publisher::new(uuid::Uuid::now_v7(), name, "test player".to_string());
-        let result = self
-            .repo
-            .create(publisher)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let publisher = publisher::Publisher::new(Uuid::now_v7(), name, ctx.user_id().clone());
+        let result = self.repo.create(publisher).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(result.into())
     }
 
     pub async fn update(
         &self,
-        pub_id: uuid::Uuid,
+        ctx: &UserContext,
+        pub_id: Uuid,
         dto: UpdateDto,
     ) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
@@ -56,39 +62,44 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
             )))?;
 
         publisher
-            .update(name, "test player".to_string())
+            .update(name, ctx.user_id().clone())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        let result = self
-            .repo
-            .update(publisher)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let result = self.repo.update(publisher).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(result.into())
     }
 
-    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(&self, pub_id: Uuid) -> Result<(), UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher with pub_id = {} not found",
                 pub_id
             )))?;
 
-        self.repo
-            .delete(publisher)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.delete(publisher).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(())
     }
 }
@@ -108,7 +119,7 @@ pub struct UpdateDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PublisherResponseDto)]
 pub struct ResponseDto {
-    pub pub_id: uuid::Uuid,
+    pub pub_id: Uuid,
     pub name: String,
 }
 
@@ -126,7 +137,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use rstest::*;
-    use std::sync::Mutex;
+    use std::{str::FromStr, sync::Mutex};
 
     struct FakeRepository {
         store: Arc<Mutex<Vec<publisher::Publisher>>>,
@@ -149,7 +160,7 @@ mod tests {
 
         async fn find_by_pub_id(
             &self,
-            pub_id: uuid::Uuid,
+            pub_id: Uuid,
         ) -> anyhow::Result<Option<publisher::Publisher>> {
             let store = self.store.lock().unwrap();
             Ok(store.iter().find(|p| p.pub_id() == pub_id).cloned())
@@ -165,8 +176,8 @@ mod tests {
                 publisher::vo::PublisherName::new(item.name().to_string()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by().to_string(),
-                item.updated_by().to_string(),
+                item.created_by().clone(),
+                item.updated_by().clone(),
             );
 
             store.push(new_publisher.clone());
@@ -200,11 +211,15 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_get(#[future] service: Service) {
         let service = service.await;
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let dto = CreateDto {
             name: "Test Publisher".to_string(),
         };
 
-        let created = service.create(dto).await.expect("Failed to create");
+        let created = service.create(&ctx, dto).await.expect("Failed to create");
         assert_eq!(created.name, "Test Publisher");
 
         let fetched = service.get(created.pub_id).await.expect("Failed to get");
@@ -216,6 +231,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_all(#[future] service: Service) {
         let service = service.await;
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let dto1 = CreateDto {
             name: "Publisher 1".to_string(),
         };
@@ -223,8 +242,14 @@ mod tests {
             name: "Publisher 2".to_string(),
         };
 
-        service.create(dto1).await.expect("Failed to create 1");
-        service.create(dto2).await.expect("Failed to create 2");
+        service
+            .create(&ctx, dto1)
+            .await
+            .expect("Failed to create 1");
+        service
+            .create(&ctx, dto2)
+            .await
+            .expect("Failed to create 2");
 
         let all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 2);
@@ -234,17 +259,21 @@ mod tests {
     #[tokio::test]
     async fn test_update(#[future] service: Service) {
         let service = service.await;
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let dto = CreateDto {
             name: "Original Name".to_string(),
         };
-        let created = service.create(dto).await.expect("Failed to create");
+        let created = service.create(&ctx, dto).await.expect("Failed to create");
 
         let update_dto = UpdateDto {
             name: "Updated Name".to_string(),
         };
 
         let updated = service
-            .update(created.pub_id, update_dto)
+            .update(&ctx, created.pub_id, update_dto)
             .await
             .expect("Failed to update");
         assert_eq!(updated.name, "Updated Name");
@@ -257,10 +286,14 @@ mod tests {
     #[tokio::test]
     async fn test_delete(#[future] service: Service) {
         let service = service.await;
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let dto = CreateDto {
             name: "To Delete".to_string(),
         };
-        let created = service.create(dto).await.expect("Failed to create");
+        let created = service.create(&ctx, dto).await.expect("Failed to create");
 
         service
             .delete(created.pub_id)

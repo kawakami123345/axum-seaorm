@@ -1,4 +1,4 @@
-use crate::error::UseCaseError;
+use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -13,11 +13,10 @@ impl Service {
     }
 
     pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let shops = self
-            .repo
-            .find_all()
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let shops = self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         let dtos = shops.into_iter().map(ResponseDto::from).collect();
         Ok(dtos)
     }
@@ -27,7 +26,10 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
@@ -35,21 +37,25 @@ impl Service {
         Ok(shop.into())
     }
 
-    pub async fn create(&self, dto: CreateDto) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(
+        &self,
+        ctx: &UserContext,
+        dto: CreateDto,
+    ) -> Result<ResponseDto, UseCaseError> {
         let name = shop::vo::ShopName::new(dto.name)?;
 
-        let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, "test player".to_string());
+        let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, ctx.user_id().clone());
 
-        let created = self
-            .repo
-            .create(shop)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let created = self.repo.create(shop).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(created.into())
     }
     pub async fn update(
         &self,
+        ctx: &UserContext,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
     ) -> Result<ResponseDto, UseCaseError> {
@@ -57,7 +63,10 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
@@ -65,14 +74,13 @@ impl Service {
 
         let name = shop::vo::ShopName::new(dto.name)?;
 
-        shop.update(name, "test player".to_string())
+        shop.update(name, ctx.user_id().clone())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        let updated = self
-            .repo
-            .update(shop)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        let updated = self.repo.update(shop).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(updated.into())
     }
@@ -82,16 +90,19 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
             )))?;
 
-        self.repo
-            .delete(shop)
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.delete(shop).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(())
     }
@@ -130,7 +141,8 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use rstest::*;
-    use std::sync::Mutex;
+    use std::{str::FromStr, sync::Mutex};
+    use uuid::Uuid;
 
     struct FakeRepository {
         store: Arc<Mutex<Vec<shop::Shop>>>,
@@ -179,11 +191,15 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_create_and_get(service: Service) {
+        let ctx = UserContext::new(
+            Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            vec![],
+        );
         let dto = CreateDto {
             name: "Test Shop".to_string(),
         };
 
-        let created = service.create(dto).await.expect("Failed to create");
+        let created = service.create(&ctx, dto).await.expect("Failed to create");
         assert_eq!(created.name, "Test Shop");
 
         let fetched = service.get(created.pub_id).await.expect("Failed to get");

@@ -214,7 +214,8 @@ async fn callback(
                                 vec![]
                             };
 
-                            let user_session = usecase::UserContext::new(sub.clone(), roles);
+                            let user_session =
+                                usecase::UserContext::new(sub.parse().unwrap(), roles);
                             let session_json = serde_json::to_string(&user_session).unwrap();
 
                             let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);

@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 pub mod vo;
 
 #[async_trait]
 pub trait Repository: Sync + Send {
     async fn find_all(&self) -> anyhow::Result<Vec<Book>>;
-    async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<Book>>;
+    async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<Book>>;
     async fn create(&self, item: Book) -> anyhow::Result<Book>;
     async fn update(&self, item: Book) -> anyhow::Result<Book>;
     async fn delete(&self, item: Book) -> anyhow::Result<()>;
@@ -16,7 +17,7 @@ pub trait Repository: Sync + Send {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Book {
     id: i32,
-    pub_id: uuid::Uuid,
+    pub_id: Uuid,
     title: vo::BookTitle,
     author: vo::BookAuthor,
     publisher: publisher::Publisher,
@@ -26,23 +27,23 @@ pub struct Book {
     price: vo::BookPrice,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
-    created_by: String,
-    updated_by: String,
-    user_id: String,
+    created_by: Uuid,
+    updated_by: Uuid,
+    user_id: Uuid,
 }
 
 impl Book {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        pub_id: uuid::Uuid,
+        pub_id: Uuid,
         title: vo::BookTitle,
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
         shop: Option<shop::Shop>,
         format: vo::BookFormat,
         price: vo::BookPrice,
-        created_by: String,
-        user_id: String,
+        created_by: Uuid,
+        user_id: Uuid,
     ) -> Self {
         let now = chrono::Utc::now();
         Self {
@@ -66,7 +67,7 @@ impl Book {
     #[allow(clippy::too_many_arguments)]
     pub fn reconstruct(
         id: i32,
-        pub_id: uuid::Uuid,
+        pub_id: Uuid,
         title: vo::BookTitle,
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
@@ -76,9 +77,9 @@ impl Book {
         price: vo::BookPrice,
         created_at: chrono::DateTime<chrono::Utc>,
         updated_at: chrono::DateTime<chrono::Utc>,
-        created_by: String,
-        updated_by: String,
-        user_id: String,
+        created_by: Uuid,
+        updated_by: Uuid,
+        user_id: Uuid,
     ) -> Self {
         Self {
             id,
@@ -101,7 +102,7 @@ impl Book {
     pub fn id(&self) -> i32 {
         self.id
     }
-    pub fn pub_id(&self) -> uuid::Uuid {
+    pub fn pub_id(&self) -> Uuid {
         self.pub_id
     }
     pub fn title(&self) -> &str {
@@ -131,17 +132,17 @@ impl Book {
     pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.updated_at
     }
-    pub fn created_by(&self) -> &str {
+    pub fn created_by(&self) -> &Uuid {
         &self.created_by
     }
-    pub fn updated_by(&self) -> &str {
+    pub fn updated_by(&self) -> &Uuid {
         &self.updated_by
     }
-    pub fn user_id(&self) -> &str {
+    pub fn user_id(&self) -> &Uuid {
         &self.user_id
     }
 
-    fn update_audit(&mut self, updated_by: String) {
+    fn update_audit(&mut self, updated_by: Uuid) {
         self.updated_at = chrono::Utc::now();
         self.updated_by = updated_by;
     }
@@ -155,7 +156,7 @@ impl Book {
         shop: Option<shop::Shop>,
         format: vo::BookFormat,
         price: vo::BookPrice,
-        updated_by: String,
+        updated_by: Uuid,
     ) -> Result<(), DomainError> {
         if self.applied_at.is_some() {
             return Err(DomainError::DomainRuleViolation(
@@ -176,7 +177,7 @@ impl Book {
     pub fn change_applied_at(
         &mut self,
         applied_at: Option<chrono::DateTime<chrono::Utc>>,
-        updated_by: String,
+        updated_by: Uuid,
     ) -> Result<(), DomainError> {
         self.applied_at = applied_at;
         self.update_audit(updated_by);

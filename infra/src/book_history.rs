@@ -12,7 +12,7 @@ pub struct Model {
 
     // Copies from Book
     pub id: i32,
-    pub pub_id: uuid::Uuid,
+    pub pub_id: Uuid,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub title: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
@@ -25,12 +25,9 @@ pub struct Model {
     pub price: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    #[sea_orm(column_type = "Uuid")]
-    pub created_by: String,
-    #[sea_orm(column_type = "Uuid")]
-    pub updated_by: String,
-    #[sea_orm(column_type = "Uuid")]
-    pub user_id: String,
+    pub created_by: Uuid,
+    pub updated_by: Uuid,
+    pub user_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

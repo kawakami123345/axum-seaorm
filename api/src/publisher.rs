@@ -1,7 +1,7 @@
 use crate::AppState;
 use crate::error::AppError;
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
@@ -59,9 +59,10 @@ pub async fn get(
 )]
 pub async fn create(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<usecase::UserContext>,
     Json(payload): Json<usecase::publisher::CreateDto>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.create(payload).await {
+    match state.publisher_usecase.create(&ctx, payload).await {
         Ok(publisher) => (StatusCode::CREATED, Json(publisher)).into_response(),
         Err(e) => AppError(e).into_response(),
     }
@@ -84,9 +85,10 @@ pub async fn create(
 pub async fn update(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
+    Extension(ctx): Extension<usecase::UserContext>,
     Json(payload): Json<usecase::publisher::UpdateDto>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.update(pub_id, payload).await {
+    match state.publisher_usecase.update(&ctx, pub_id, payload).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => AppError(e).into_response(),
     }

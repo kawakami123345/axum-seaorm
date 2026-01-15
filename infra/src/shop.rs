@@ -9,15 +9,13 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     #[sea_orm(unique)]
-    pub pub_id: uuid::Uuid,
+    pub pub_id: Uuid,
     #[sea_orm(unique, column_type = "String(StringLen::N(32))")]
     pub name: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    #[sea_orm(column_type = "Uuid")]
-    pub created_by: String,
-    #[sea_orm(column_type = "Uuid")]
-    pub updated_by: String,
+    pub created_by: Uuid,
+    pub updated_by: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -82,8 +80,8 @@ impl shop::Repository for SqlRepository {
             name: Set(item.name().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            created_by: Set(*item.created_by()),
+            updated_by: Set(*item.updated_by()),
             ..Default::default()
         };
 
@@ -98,8 +96,8 @@ impl shop::Repository for SqlRepository {
             name: Set(item.name().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
+            created_by: Set(*item.created_by()),
+            updated_by: Set(*item.updated_by()),
         };
 
         let result = active_model.update(&self.db).await?;

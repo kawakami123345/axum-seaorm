@@ -9,7 +9,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     #[sea_orm(unique)]
-    pub pub_id: uuid::Uuid,
+    pub pub_id: Uuid,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub title: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
@@ -22,12 +22,9 @@ pub struct Model {
     pub price: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    #[sea_orm(column_type = "Uuid")]
-    pub created_by: String,
-    #[sea_orm(column_type = "Uuid")]
-    pub updated_by: String,
-    #[sea_orm(column_type = "Uuid")]
-    pub user_id: String,
+    pub created_by: Uuid,
+    pub updated_by: Uuid,
+    pub user_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -210,9 +207,9 @@ impl book::Repository for SqlRepository {
             format: Set(item.format().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
-            user_id: Set(item.user_id().to_string()),
+            created_by: Set(item.created_by().clone()),
+            updated_by: Set(item.updated_by().clone()),
+            user_id: Set(item.user_id().clone()),
             ..Default::default()
         };
         let result = active_model.insert(&self.db).await?;
@@ -250,9 +247,9 @@ impl book::Repository for SqlRepository {
             format: Set(item.format().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().to_string()),
-            updated_by: Set(item.updated_by().to_string()),
-            user_id: Set(item.user_id().to_string()),
+            created_by: Set(item.created_by().clone()),
+            updated_by: Set(item.updated_by().clone()),
+            user_id: Set(item.user_id().clone()),
         };
         let result = active_model.update(&self.db).await?;
 
