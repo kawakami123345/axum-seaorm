@@ -97,7 +97,10 @@ impl Service {
             .publisher_repo
             .find_by_pub_id(dto.publisher_id)
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?
             .ok_or(UseCaseError::DomainRuleViolation(
                 "Publisher not found".into(),
             ))?;
@@ -106,7 +109,10 @@ impl Service {
             self.shop_repo
                 .find_by_pub_id(shop_id)
                 .await
-                .map_err(|_| UseCaseError::DatabaseError)?
+                .map_err(|e| {
+                    eprintln!("Database error in create book (find shop): {:?}", e);
+                    UseCaseError::DatabaseError
+                })?
                 .ok_or(UseCaseError::DomainRuleViolation("Shop not found".into()))
                 .map(Some)?
         } else {
@@ -124,10 +130,10 @@ impl Service {
             ctx.user_id.clone(),
             ctx.user_id.clone(),
         );
-        self.repo
-            .create(book.clone())
-            .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+        self.repo.create(book.clone()).await.map_err(|e| {
+            eprintln!("Database error in create book: {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(book.into())
     }

@@ -25,11 +25,11 @@ pub struct Model {
     pub price: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    #[sea_orm(column_type = "String(StringLen::N(32))")]
+    #[sea_orm(column_type = "Uuid")]
     pub created_by: String,
-    #[sea_orm(column_type = "String(StringLen::N(32))")]
+    #[sea_orm(column_type = "Uuid")]
     pub updated_by: String,
-    #[sea_orm(column_type = "Text")]
+    #[sea_orm(column_type = "Uuid")]
     pub user_id: String,
 }
 
