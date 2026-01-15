@@ -226,10 +226,13 @@ impl Service {
             .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        self.repo.delete(book).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        self.repo
+            .delete(book, ctx.user_id.clone())
+            .await
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?;
         Ok(())
     }
     pub async fn change_applied_at(
@@ -409,7 +412,7 @@ mod tests {
             }
         }
 
-        async fn delete(&self, item: book::Book) -> anyhow::Result<()> {
+        async fn delete(&self, item: book::Book, _deleted_by: uuid::Uuid) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
             store.retain(|b| b.pub_id() != item.pub_id());
             Ok(())

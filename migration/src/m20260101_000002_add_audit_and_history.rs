@@ -23,21 +23,31 @@ impl MigrationTrait for Migration {
         db.execute_unprepared(
             r#"
             CREATE OR REPLACE FUNCTION save_history_book() RETURNS TRIGGER AS $$
+            DECLARE
+                current_user_id uuid;
             BEGIN
+                BEGIN
+                    current_user_id := (current_setting('app.current_user_id', true)::uuid);
+                EXCEPTION WHEN OTHERS THEN
+                    current_user_id := NULL;
+                END;
+
                 IF (TG_OP = 'DELETE') THEN
                     INSERT INTO book_history
                     SELECT
                         nextval(pg_get_serial_sequence('book_history', 'history_id')),
-                        'DELETE',
-                        NOW(),
+                        'DELETE' AS operation_type,
+                        NOW() AS operation_at,
+                        current_user_id AS operation_by,
                         (OLD).*;
                     RETURN OLD;
                 ELSE
                     INSERT INTO book_history
                     SELECT
                         nextval(pg_get_serial_sequence('book_history', 'history_id')),
-                        TG_OP,
-                        NOW(),
+                        TG_OP AS operation_type,
+                        NOW() AS operation_at,
+                        current_user_id AS operation_by,
                         (NEW).*;
                     RETURN NEW;
                 END IF;
@@ -61,21 +71,31 @@ impl MigrationTrait for Migration {
         db.execute_unprepared(
             r#"
             CREATE OR REPLACE FUNCTION save_history_publisher() RETURNS TRIGGER AS $$
+            DECLARE
+                current_user_id uuid;
             BEGIN
+                BEGIN
+                    current_user_id := (current_setting('app.current_user_id', true)::uuid);
+                EXCEPTION WHEN OTHERS THEN
+                    current_user_id := NULL;
+                END;
+
                 IF (TG_OP = 'DELETE') THEN
                     INSERT INTO publisher_history
                     SELECT
                         nextval(pg_get_serial_sequence('publisher_history', 'history_id')),
-                        'DELETE',
-                        NOW(),
+                        'DELETE' AS operation_type,
+                        NOW() AS operation_at,
+                        current_user_id AS operation_by,
                         (OLD).*;
                     RETURN OLD;
                 ELSE
                     INSERT INTO publisher_history
                     SELECT
                         nextval(pg_get_serial_sequence('publisher_history', 'history_id')),
-                        TG_OP,
-                        NOW(),
+                        TG_OP AS operation_type,
+                        NOW() AS operation_at,
+                        current_user_id AS operation_by,
                         (NEW).*;
                     RETURN NEW;
                 END IF;

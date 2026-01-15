@@ -1,7 +1,18 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseBackend, DatabaseConnection, EntityTrait,
+    QueryFilter, Set, Statement, StatementBuilder, TransactionTrait,
+};
+
+struct RawStatement(Statement);
+
+impl StatementBuilder for RawStatement {
+    fn build(&self, _db_backend: &DatabaseBackend) -> Statement {
+        self.0.clone()
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "book")]
@@ -178,9 +189,18 @@ impl book::Repository for SqlRepository {
     }
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
+        let txn = self.db.begin().await?;
+
+        txn.query_one(&RawStatement(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            "SELECT set_config('app.current_user_id', $1, true)",
+            vec![item.updated_by().to_string().into()],
+        )))
+        .await?;
+
         let publisher_model = super::publisher::Entity::find()
             .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
-            .one(&self.db)
+            .one(&txn)
             .await?
             .ok_or(anyhow::anyhow!("Publisher not found"))?;
 
@@ -188,7 +208,7 @@ impl book::Repository for SqlRepository {
             Some(
                 super::shop::Entity::find()
                     .filter(super::shop::Column::PubId.eq(s.pub_id()))
-                    .one(&self.db)
+                    .one(&txn)
                     .await?
                     .ok_or(anyhow::anyhow!("Shop not found"))?,
             )
@@ -212,14 +232,25 @@ impl book::Repository for SqlRepository {
             user_id: Set(item.user_id().clone()),
             ..Default::default()
         };
-        let result = active_model.insert(&self.db).await?;
+        let result = active_model.insert(&txn).await?;
+        txn.commit().await?;
+
         Ok(Self::to_domain(result, Some(publisher_model), shop_model)?)
     }
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
+        let txn = self.db.begin().await?;
+
+        txn.query_one(&RawStatement(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            "SELECT set_config('app.current_user_id', $1, true)",
+            vec![item.updated_by().to_string().into()],
+        )))
+        .await?;
+
         let publisher_model = super::publisher::Entity::find()
             .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
-            .one(&self.db)
+            .one(&txn)
             .await?
             .ok_or(anyhow::anyhow!("Publisher not found"))?;
 
@@ -227,7 +258,7 @@ impl book::Repository for SqlRepository {
             Some(
                 super::shop::Entity::find()
                     .filter(super::shop::Column::PubId.eq(s.pub_id()))
-                    .one(&self.db)
+                    .one(&txn)
                     .await?
                     .ok_or(anyhow::anyhow!("Shop not found"))?,
             )
@@ -251,13 +282,24 @@ impl book::Repository for SqlRepository {
             updated_by: Set(item.updated_by().clone()),
             user_id: Set(item.user_id().clone()),
         };
-        let result = active_model.update(&self.db).await?;
+        let result = active_model.update(&txn).await?;
+        txn.commit().await?;
 
         Ok(Self::to_domain(result, Some(publisher_model), shop_model)?)
     }
 
-    async fn delete(&self, item: book::Book) -> anyhow::Result<()> {
-        Entity::delete_by_id(item.id()).exec(&self.db).await?;
+    async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
+        let txn = self.db.begin().await?;
+
+        txn.query_one(&RawStatement(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            "SELECT set_config('app.current_user_id', $1, true)",
+            vec![deleted_by.to_string().into()],
+        )))
+        .await?;
+
+        Entity::delete_by_id(item.id()).exec(&txn).await?;
+        txn.commit().await?;
         Ok(())
     }
 }

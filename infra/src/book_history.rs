@@ -9,6 +9,7 @@ pub struct Model {
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub operation_type: String, // 'INSERT', 'UPDATE', 'DELETE'
     pub operation_at: chrono::DateTime<chrono::Utc>,
+    pub operation_by: Uuid,
 
     // Copies from Book
     pub id: i32,
@@ -65,6 +66,7 @@ mod tests {
                 history_id: _,
                 operation_type: _,
                 operation_at: _,
+                operation_by: _,
                 id: _,
                 pub_id: _,
                 title: _,
