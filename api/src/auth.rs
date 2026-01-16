@@ -159,109 +159,99 @@ async fn callback(
     Query(params): Query<AuthRequest>,
 ) -> impl IntoResponse {
     let client = &state.oidc_client;
+    let cookie_key = &state.cookie_key;
 
-    let nonce_str = if let Some(cookie) = cookies.private(&state.cookie_key).get(NONCE_COOKIE_NAME)
-    {
-        cookie.value().to_string()
-    } else {
-        return Redirect::to("/login?error=missing_nonce");
+    // 1. Validate Cookies & State
+    let Some(nonce_cookie) = cookies.private(cookie_key).get(NONCE_COOKIE_NAME) else {
+        return Redirect::to("/login?error=missing_nonce").into_response();
     };
+    let nonce_str = nonce_cookie.value().to_string();
 
-    let state_str = if let Some(cookie) = cookies.private(&state.cookie_key).get(STATE_COOKIE_NAME)
-    {
-        cookie.value().to_string()
-    } else {
-        return Redirect::to("/login?error=missing_state");
+    let Some(state_cookie) = cookies.private(cookie_key).get(STATE_COOKIE_NAME) else {
+        return Redirect::to("/login?error=missing_state").into_response();
     };
+    let state_str = state_cookie.value().to_string();
 
     if params.state != state_str {
-        return Redirect::to("/login?error=invalid_state");
+        return Redirect::to("/login?error=invalid_state").into_response();
     }
 
+    // 2. Exchange Code for Token
     let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
     let redirect_url =
         RedirectUrl::new(format!("{}/callback", app_url)).expect("Invalid redirect URL");
-
     let client = client.clone().set_redirect_uri(redirect_url);
 
     let token_request = match client.exchange_code(AuthorizationCode::new(params.code)) {
         Ok(r) => r,
         Err(e) => {
             error!(error = ?e, "Failed to create token request");
-            return Redirect::to("/login?error=internal_configuration_error");
+            return Redirect::to("/login?error=internal_configuration_error").into_response();
         }
     };
 
-    let token_response = token_request.request_async(&state.http_client).await;
-
-    match token_response {
-        Ok(token_response) => {
-            let id_token = token_response.id_token();
-            match id_token {
-                Some(id_token) => {
-                    let nonce = Nonce::new(nonce_str);
-                    let claims = id_token.claims(&client.id_token_verifier(), &nonce);
-
-                    match claims {
-                        Ok(claims) => {
-                            let sub = claims.subject().to_string();
-                            info!(sub = %sub, "User login successful");
-
-                            // rolesの取得ロジック
-                            let roles = if let Ok(id_token_str) = serde_json::to_string(id_token) {
-                                extract_roles(&id_token_str)
-                            } else {
-                                vec![]
-                            };
-
-                            let user_session =
-                                usecase::UserContext::new(sub.parse().unwrap(), roles);
-                            let session_json = serde_json::to_string(&user_session).unwrap();
-
-                            let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
-                            session_cookie.set_path("/");
-                            session_cookie.set_http_only(true);
-                            session_cookie.set_same_site(SameSite::Lax);
-                            #[cfg(not(debug_assertions))]
-                            session_cookie.set_secure(true);
-                            session_cookie.set_max_age(Some(
-                                time::Duration::hours(24).try_into().unwrap_or_else(|_| {
-                                    time::Duration::seconds(86400).try_into().unwrap()
-                                }),
-                            ));
-
-                            cookies.private(&state.cookie_key).add(session_cookie);
-
-                            // クッキーを削除
-                            let mut delete_cookie = Cookie::new(NONCE_COOKIE_NAME, "");
-                            delete_cookie.set_path("/");
-                            delete_cookie
-                                .set_max_age(Some(time::Duration::seconds(0).try_into().unwrap()));
-                            cookies
-                                .private(&state.cookie_key)
-                                .remove(delete_cookie.clone());
-
-                            delete_cookie.set_name(STATE_COOKIE_NAME);
-                            cookies.private(&state.cookie_key).remove(delete_cookie);
-
-                            let frontend_url = std::env::var("FRONTEND_URL")
-                                .unwrap_or_else(|_| "http://localhost:5173".to_string());
-                            Redirect::to(&frontend_url)
-                        }
-                        Err(e) => {
-                            error!(error = ?e, "ID token validation failed");
-                            Redirect::to("/login?error=invalid_token")
-                        }
-                    }
-                }
-                None => Redirect::to("/login?error=no_id_token"),
-            }
-        }
+    let token_response = match token_request.request_async(&state.http_client).await {
+        Ok(r) => r,
         Err(e) => {
             error!(error = ?e, "Token exchange failed");
-            Redirect::to("/login?error=token_exchange_failed")
+            return Redirect::to("/login?error=token_exchange_failed").into_response();
         }
-    }
+    };
+
+    // 3. Verify ID Token & Claims
+    let Some(id_token) = token_response.id_token() else {
+        return Redirect::to("/login?error=no_id_token").into_response();
+    };
+
+    let claims = match id_token.claims(&client.id_token_verifier(), &Nonce::new(nonce_str)) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(error = ?e, "ID token validation failed");
+            return Redirect::to("/login?error=invalid_token").into_response();
+        }
+    };
+
+    let sub = claims.subject().to_string();
+    info!(sub = %sub, "User login successful");
+
+    // 4. Create Session
+    let roles = if let Ok(id_token_str) = serde_json::to_string(id_token) {
+        extract_roles(&id_token_str)
+    } else {
+        vec![]
+    };
+
+    let user_session = usecase::UserContext::new(sub.parse().unwrap(), roles);
+    let session_json = serde_json::to_string(&user_session).unwrap();
+
+    let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
+    session_cookie.set_path("/");
+    session_cookie.set_http_only(true);
+    session_cookie.set_same_site(SameSite::Lax);
+    #[cfg(not(debug_assertions))]
+    session_cookie.set_secure(true);
+    session_cookie.set_max_age(Some(
+        time::Duration::hours(24)
+            .try_into()
+            .unwrap_or_else(|_| time::Duration::seconds(86400).try_into().unwrap()),
+    ));
+
+    cookies.private(cookie_key).add(session_cookie);
+
+    // 5. Cleanup & Redirect
+    let mut delete_nonce = Cookie::new(NONCE_COOKIE_NAME, "");
+    delete_nonce.set_path("/");
+    delete_nonce.set_max_age(Some(time::Duration::ZERO.try_into().unwrap()));
+    cookies.private(cookie_key).remove(delete_nonce);
+
+    let mut delete_state = Cookie::new(STATE_COOKIE_NAME, "");
+    delete_state.set_path("/");
+    delete_state.set_max_age(Some(time::Duration::ZERO.try_into().unwrap()));
+    cookies.private(cookie_key).remove(delete_state);
+
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
+    Redirect::to(&frontend_url).into_response()
 }
 
 /// ログアウト: セッションCookieを削除し、Keycloakからもログアウトする
@@ -273,13 +263,7 @@ pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> imp
     cookies.private(&state.cookie_key).remove(cookie);
 
     // Logout logic
-    let client_id = match std::env::var("OIDC_CLIENT_ID") {
-        Ok(v) => v,
-        Err(_) => {
-            error!("OIDC_CLIENT_ID must be set");
-            return Redirect::to("/login?error=internal_configuration_error").into_response();
-        }
-    };
+    let client_id = state.oidc_client.client_id().to_string();
     let logout_url_base = match std::env::var("OIDC_LOGOUT_URL") {
         Ok(v) => v,
         Err(_) => {
