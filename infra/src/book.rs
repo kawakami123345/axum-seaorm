@@ -1,18 +1,9 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseBackend, DatabaseConnection, EntityTrait,
-    QueryFilter, Set, Statement, StatementBuilder, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
-struct RawStatement(Statement);
-
-impl StatementBuilder for RawStatement {
-    fn build(&self, _db_backend: &DatabaseBackend) -> Statement {
-        self.0.clone()
-    }
-}
+use crate::BeginWithUser;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "book")]
@@ -189,14 +180,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let txn = self.db.begin().await?;
-
-        txn.query_one(&RawStatement(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            "SELECT set_config('app.current_user_id', $1, true)",
-            vec![item.updated_by().to_string().into()],
-        )))
-        .await?;
+        let txn = self.db.begin_with_user(&item.updated_by()).await?;
 
         let publisher_model = super::publisher::Entity::find()
             .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
@@ -239,14 +223,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let txn = self.db.begin().await?;
-
-        txn.query_one(&RawStatement(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            "SELECT set_config('app.current_user_id', $1, true)",
-            vec![item.updated_by().to_string().into()],
-        )))
-        .await?;
+        let txn = self.db.begin_with_user(&item.updated_by()).await?;
 
         let publisher_model = super::publisher::Entity::find()
             .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
@@ -289,14 +266,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
-        let txn = self.db.begin().await?;
-
-        txn.query_one(&RawStatement(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            "SELECT set_config('app.current_user_id', $1, true)",
-            vec![deleted_by.to_string().into()],
-        )))
-        .await?;
+        let txn = self.db.begin_with_user(&deleted_by).await?;
 
         Entity::delete_by_id(item.id()).exec(&txn).await?;
         txn.commit().await?;

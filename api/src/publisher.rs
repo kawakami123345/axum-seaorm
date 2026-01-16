@@ -109,9 +109,10 @@ pub async fn update(
 )]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<usecase::UserContext>,
     Path(pub_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.delete(pub_id).await {
+    match state.publisher_usecase.delete(&ctx, pub_id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }

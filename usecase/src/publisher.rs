@@ -82,7 +82,7 @@ impl Service {
         Ok(result.into())
     }
 
-    pub async fn delete(&self, pub_id: Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
@@ -96,10 +96,13 @@ impl Service {
                 pub_id
             )))?;
 
-        self.repo.delete(publisher).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        self.repo
+            .delete(publisher, ctx.user_id().clone())
+            .await
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?;
         Ok(())
     }
 }
@@ -194,7 +197,11 @@ mod tests {
             }
         }
 
-        async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
+        async fn delete(
+            &self,
+            item: publisher::Publisher,
+            _deleted_by: Uuid,
+        ) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
             store.retain(|p| p.pub_id() != item.pub_id());
             Ok(())
@@ -296,7 +303,7 @@ mod tests {
         let created = service.create(&ctx, dto).await.expect("Failed to create");
 
         service
-            .delete(created.pub_id)
+            .delete(&ctx, created.pub_id)
             .await
             .expect("Failed to delete");
 

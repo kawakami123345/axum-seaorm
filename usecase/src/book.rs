@@ -461,7 +461,11 @@ mod tests {
         ) -> anyhow::Result<publisher::Publisher> {
             panic!("Not implemented")
         }
-        async fn delete(&self, _item: publisher::Publisher) -> anyhow::Result<()> {
+        async fn delete(
+            &self,
+            _item: publisher::Publisher,
+            _delete_by: Uuid,
+        ) -> anyhow::Result<()> {
             panic!("Not implemented")
         }
     }

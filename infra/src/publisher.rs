@@ -1,3 +1,4 @@
+use crate::BeginWithUser;
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
@@ -78,6 +79,8 @@ impl publisher::Repository for SqlRepository {
     }
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+
         let active_model = ActiveModel {
             pub_id: Set(item.pub_id()),
             name: Set(item.name().to_string()),
@@ -88,11 +91,14 @@ impl publisher::Repository for SqlRepository {
             ..Default::default()
         };
 
-        let result = active_model.insert(&self.db).await?;
+        let result = active_model.insert(&txn).await?;
+        txn.commit().await?;
         Ok(Self::to_domain(result)?)
     }
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+
         let active_model = ActiveModel {
             id: Set(item.id()),
             pub_id: Set(item.pub_id()),
@@ -103,12 +109,20 @@ impl publisher::Repository for SqlRepository {
             updated_by: Set(item.updated_by().clone()),
         };
 
-        let result = active_model.update(&self.db).await?;
+        let result = active_model.update(&txn).await?;
+        txn.commit().await?;
         Ok(Self::to_domain(result)?)
     }
 
-    async fn delete(&self, item: publisher::Publisher) -> anyhow::Result<()> {
-        Entity::delete_by_id(item.id()).exec(&self.db).await?;
+    async fn delete(
+        &self,
+        item: publisher::Publisher,
+        deleted_by: uuid::Uuid,
+    ) -> anyhow::Result<()> {
+        let txn = self.db.begin_with_user(&deleted_by).await?;
+
+        Entity::delete_by_id(item.id()).exec(&txn).await?;
+        txn.commit().await?;
         Ok(())
     }
 }
