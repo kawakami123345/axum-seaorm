@@ -17,10 +17,8 @@ pub struct Model {
     pub title: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub author: String,
-    #[sea_orm(has_one)]
-    pub publisher: HasOne<super::publisher::Entity>,
-    #[sea_orm(has_one)]
-    pub shop: HasOne<super::shop::Entity>,
+    pub publisher_id: i32,
+    pub shop_id: Option<i32>,
     pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub format: String,
@@ -30,6 +28,11 @@ pub struct Model {
     pub created_by: Uuid,
     pub updated_by: Uuid,
     pub user_id: Uuid,
+
+    #[sea_orm(has_one)]
+    pub publisher: HasOne<super::publisher::Entity>,
+    #[sea_orm(has_one)]
+    pub shop: HasOne<super::shop::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
