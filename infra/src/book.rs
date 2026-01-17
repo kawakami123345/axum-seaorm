@@ -29,9 +29,9 @@ pub struct Model {
     pub updated_by: Uuid,
     pub user_id: Uuid,
 
-    #[sea_orm(has_one)]
+    #[sea_orm(belongs_to, from = "publisher_id", to = "id")]
     pub publisher: HasOne<super::publisher::Entity>,
-    #[sea_orm(has_one)]
+    #[sea_orm(belongs_to, from = "shop_id", to = "id")]
     pub shop: HasOne<super::shop::Entity>,
 }
 
