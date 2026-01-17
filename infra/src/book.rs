@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter};
 
 use crate::BeginWithUser;
 
+#[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "book")]
 pub struct Model {
@@ -16,8 +17,10 @@ pub struct Model {
     pub title: String,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub author: String,
-    pub publisher_id: i32,
-    pub shop_id: Option<i32>,
+    #[sea_orm(has_one)]
+    pub publisher: HasOne<super::publisher::Entity>,
+    #[sea_orm(has_one)]
+    pub shop: HasOne<super::shop::Entity>,
     pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub format: String,
@@ -27,34 +30,6 @@ pub struct Model {
     pub created_by: Uuid,
     pub updated_by: Uuid,
     pub user_id: Uuid,
-}
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::publisher::Entity",
-        from = "Column::PublisherId",
-        to = "super::publisher::Column::Id"
-    )]
-    Publisher,
-    #[sea_orm(
-        belongs_to = "super::shop::Entity",
-        from = "Column::ShopId",
-        to = "super::shop::Column::Id"
-    )]
-    Shop,
-}
-
-impl Related<super::publisher::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Publisher.def()
-    }
-}
-
-impl Related<super::shop::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Shop.def()
-    }
 }
 
 impl ActiveModelBehavior for ActiveModel {}
@@ -68,11 +43,7 @@ impl SqlRepository {
         Self { db }
     }
 
-    fn to_domain(
-        model: Model,
-        publisher: Option<super::publisher::Model>,
-        shop: Option<super::shop::Model>,
-    ) -> anyhow::Result<book::Book> {
+    fn to_domain(model: ModelEx) -> anyhow::Result<book::Book> {
         let title = book::vo::BookTitle::new(model.title)
             .map_err(|e| anyhow::anyhow!("Invalid title in DB: {}", e))?;
         let author = book::vo::BookAuthor::new(model.author)
@@ -85,34 +56,40 @@ impl SqlRepository {
             _ => return Err(anyhow::anyhow!("Invalid format in DB: {}", model.format)),
         };
 
-        let publisher_entity = if let Some(p) = publisher {
-            publisher::Publisher::reconstruct(
-                p.id,
-                p.pub_id,
-                publisher::vo::PublisherName::new(p.name)
-                    .map_err(|e| anyhow::anyhow!("Invalid publisher name in DB: {}", e))?,
-                p.created_at,
-                p.updated_at,
-                p.created_by,
-                p.updated_by,
-            )
-        } else {
-            return Err(anyhow::anyhow!("Publisher not found for book {}", model.id));
+        let publisher = match model.publisher.as_ref() {
+            Some(p) => {
+                let name = publisher::vo::PublisherName::new(p.name.clone())
+                    .map_err(|e| anyhow::anyhow!("Invalid publisher name in DB: {}", e))?;
+
+                publisher::Publisher::reconstruct(
+                    p.id,
+                    p.pub_id,
+                    name,
+                    p.created_at,
+                    p.updated_at,
+                    p.created_by,
+                    p.updated_by,
+                )
+            }
+            None => return Err(anyhow::anyhow!("Publisher not found in DB")),
         };
 
-        let shop_entity = if let Some(s) = shop {
-            Some(shop::Shop::reconstruct(
-                s.id,
-                s.pub_id,
-                shop::vo::ShopName::new(s.name)
-                    .map_err(|e| anyhow::anyhow!("Invalid shop name in DB: {}", e))?,
-                s.created_at,
-                s.updated_at,
-                s.created_by,
-                s.updated_by,
-            ))
-        } else {
-            None
+        let shop = match model.shop.as_ref() {
+            Some(s) => {
+                let name = shop::vo::ShopName::new(s.name.clone())
+                    .map_err(|e| anyhow::anyhow!("Invalid shop name in DB: {}", e))?;
+
+                Some(shop::Shop::reconstruct(
+                    s.id,
+                    s.pub_id,
+                    name,
+                    s.created_at,
+                    s.updated_at,
+                    s.created_by,
+                    s.updated_by,
+                ))
+            }
+            None => None,
         };
 
         Ok(book::Book::reconstruct(
@@ -120,8 +97,8 @@ impl SqlRepository {
             model.pub_id,
             title,
             author,
-            publisher_entity,
-            shop_entity,
+            publisher,
+            shop,
             model.applied_at,
             format,
             price,
@@ -137,61 +114,42 @@ impl SqlRepository {
 #[async_trait]
 impl book::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
-        let books_with_publishers = Entity::find()
-            .find_also_related(super::publisher::Entity)
+        let books = Entity::load()
+            .with(super::publisher::Entity)
+            .with(super::shop::Entity)
             .all(&self.db)
-            .await?;
-
-        let mut books = Vec::new();
-        for (b, p) in books_with_publishers {
-            let shop = if let Some(shop_id) = b.shop_id {
-                super::shop::Entity::find_by_id(shop_id)
-                    .one(&self.db)
-                    .await?
-            } else {
-                None
-            };
-            books.push(Self::to_domain(b, p, shop)?);
-        }
-
+            .await?
+            .into_iter()
+            .map(Self::to_domain)
+            .collect::<anyhow::Result<Vec<book::Book>>>()?;
         Ok(books)
     }
 
     async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<book::Book>> {
-        let result = Entity::find()
-            .filter(Column::PubId.eq(pub_id))
-            .find_also_related(super::publisher::Entity)
+        let result = Entity::load()
+            .filter_by_pub_id(pub_id)
+            .with(super::publisher::Entity)
+            .with(super::shop::Entity)
             .one(&self.db)
-            .await?;
-
-        match result {
-            Some((b, p)) => {
-                let shop = if let Some(shop_id) = b.shop_id {
-                    super::shop::Entity::find_by_id(shop_id)
-                        .one(&self.db)
-                        .await?
-                } else {
-                    None
-                };
-                Ok(Some(Self::to_domain(b, p, shop)?))
-            }
-            None => Ok(None),
-        }
+            .await?
+            .map(Self::to_domain)
+            .transpose()?;
+        Ok(result)
     }
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let txn = self.db.begin_with_user(&item.updated_by()).await?;
 
-        let publisher_model = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
+        let publisher_model = super::publisher::Entity::load()
+            .filter_by_pub_id(item.publisher().pub_id())
             .one(&txn)
             .await?
             .ok_or(anyhow::anyhow!("Publisher not found"))?;
 
         let shop_model = if let Some(s) = item.shop() {
             Some(
-                super::shop::Entity::find()
-                    .filter(super::shop::Column::PubId.eq(s.pub_id()))
+                super::shop::Entity::load()
+                    .filter_by_pub_id(s.pub_id())
                     .one(&txn)
                     .await?
                     .ok_or(anyhow::anyhow!("Shop not found"))?,
@@ -200,69 +158,88 @@ impl book::Repository for SqlRepository {
             None
         };
 
-        let active_model = ActiveModel {
-            pub_id: Set(item.pub_id()),
-            publisher_id: Set(publisher_model.id),
-            shop_id: Set(shop_model.as_ref().map(|s| s.id)),
-            title: Set(item.title().to_string()),
-            author: Set(item.author().to_string()),
-            price: Set(item.price()),
-            applied_at: Set(item.applied_at()),
-            format: Set(item.format().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().clone()),
-            updated_by: Set(item.updated_by().clone()),
-            user_id: Set(item.user_id().clone()),
-            ..Default::default()
-        };
-        let result = active_model.insert(&txn).await?;
+        let mut active_model = ActiveModel::builder()
+            .set_pub_id(item.pub_id())
+            .set_title(item.title().to_string())
+            .set_author(item.author().to_string())
+            .set_price(item.price())
+            .set_applied_at(item.applied_at())
+            .set_format(item.format().to_string())
+            .set_created_at(item.created_at())
+            .set_updated_at(item.updated_at())
+            .set_created_by(item.created_by().clone())
+            .set_updated_by(item.updated_by().clone())
+            .set_user_id(item.user_id().clone())
+            .set_publisher(publisher_model.into_active_model());
+        if let Some(shop) = shop_model {
+            active_model = active_model.set_shop(shop.into_active_model());
+        }
+        let active_model = active_model.insert(&txn).await?;
+
         txn.commit().await?;
 
-        Ok(Self::to_domain(result, Some(publisher_model), shop_model)?)
+        Ok(Self::to_domain(active_model)?)
     }
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let txn = self.db.begin_with_user(&item.updated_by()).await?;
 
-        let publisher_model = super::publisher::Entity::find()
-            .filter(super::publisher::Column::PubId.eq(item.publisher().pub_id()))
+        let book = Entity::load()
+            .filter_by_pub_id(item.pub_id())
+            .with(super::publisher::Entity)
+            .with(super::shop::Entity)
             .one(&txn)
             .await?
-            .ok_or(anyhow::anyhow!("Publisher not found"))?;
+            .ok_or(anyhow::anyhow!("Book not found"))?;
 
-        let shop_model = if let Some(s) = item.shop() {
-            Some(
-                super::shop::Entity::find()
-                    .filter(super::shop::Column::PubId.eq(s.pub_id()))
+        let mut active_model = book.clone().into_active_model();
+
+        active_model = active_model
+            .set_title(item.title().to_string())
+            .set_author(item.author().to_string())
+            .set_price(item.price())
+            .set_applied_at(item.applied_at())
+            .set_format(item.format().to_string())
+            .set_updated_at(item.updated_at())
+            .set_updated_by(item.updated_by().clone());
+
+        if book.publisher.as_ref().unwrap().pub_id != item.publisher().pub_id() {
+            let publisher_model = super::publisher::Entity::load()
+                .filter_by_pub_id(item.publisher().pub_id())
+                .one(&txn)
+                .await?
+                .ok_or(anyhow::anyhow!("Publisher not found"))?;
+            active_model = active_model.set_publisher(publisher_model.into_active_model());
+        }
+        match (book.shop.as_ref(), item.shop()) {
+            (Some(b), Some(s)) if b.pub_id != s.pub_id() => {
+                let shop_model = super::shop::Entity::load()
+                    .filter_by_pub_id(s.pub_id())
                     .one(&txn)
                     .await?
-                    .ok_or(anyhow::anyhow!("Shop not found"))?,
-            )
-        } else {
-            None
-        };
+                    .ok_or(anyhow::anyhow!("Shop not found"))?;
+                active_model = active_model.set_shop(shop_model.into_active_model());
+            }
+            (Some(_), Some(_)) => {}
+            (None, Some(s)) => {
+                let shop_model = super::shop::Entity::load()
+                    .filter_by_pub_id(s.pub_id())
+                    .one(&txn)
+                    .await?
+                    .ok_or(anyhow::anyhow!("Shop not found"))?;
+                active_model = active_model.set_shop(shop_model.into_active_model());
+            }
+            (Some(_), &None) => {
+                // TODO: 消し方わからない
+                todo!()
+                // active_model = active_model.set_shop(None);
+            }
+            (None, None) => {}
+        }
+        let active_model = active_model.update(&txn).await?;
 
-        let active_model = ActiveModel {
-            id: Set(item.id()),
-            pub_id: Set(item.pub_id()),
-            publisher_id: Set(publisher_model.id),
-            shop_id: Set(shop_model.as_ref().map(|s| s.id)),
-            title: Set(item.title().to_string()),
-            author: Set(item.author().to_string()),
-            price: Set(item.price()),
-            applied_at: Set(item.applied_at()),
-            format: Set(item.format().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().clone()),
-            updated_by: Set(item.updated_by().clone()),
-            user_id: Set(item.user_id().clone()),
-        };
-        let result = active_model.update(&txn).await?;
         txn.commit().await?;
-
-        Ok(Self::to_domain(result, Some(publisher_model), shop_model)?)
+        Ok(Self::to_domain(active_model)?)
     }
 
     async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {

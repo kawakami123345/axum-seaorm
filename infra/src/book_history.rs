@@ -50,8 +50,6 @@ mod tests {
                 pub_id,
                 title,
                 author,
-                publisher_id,
-                shop_id,
                 applied_at,
                 format,
                 price,
@@ -85,20 +83,8 @@ mod tests {
 
             // コンパイルエラーを防ぐために変数を使用
             let _ = (
-                id,
-                pub_id,
-                title,
-                author,
-                publisher_id,
-                shop_id,
-                applied_at,
-                format,
-                price,
-                created_at,
-                updated_at,
-                created_by,
-                updated_by,
-                user_id,
+                id, pub_id, title, author, applied_at, format, price, created_at, updated_at,
+                created_by, updated_by, user_id,
             );
         }
     }

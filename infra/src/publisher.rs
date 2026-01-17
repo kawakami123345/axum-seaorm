@@ -4,6 +4,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
+#[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "publisher")]
 pub struct Model {
@@ -17,18 +18,8 @@ pub struct Model {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub created_by: Uuid,
     pub updated_by: Uuid,
-}
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(has_many = "super::book::Entity")]
-    Book,
-}
-
-impl Related<super::book::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Book.def()
-    }
+    #[sea_orm(has_many)]
+    pub books: HasMany<super::book::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
@@ -42,7 +33,7 @@ impl SqlRepository {
         Self { db }
     }
 
-    fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
+    pub fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
         let name = publisher::vo::PublisherName::new(model.name)
             .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
         Ok(publisher::Publisher::reconstruct(
