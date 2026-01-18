@@ -28,7 +28,7 @@ axum = { workspace = true }
 anyhow = { workspace = true }
 uuid = { workspace = true }
 migration = { workspace = true }
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+tracing-subscriber = { workspace = true }
 openidconnect = { workspace = true }
 axum-extra = { workspace = true }
 tower-cookies = { workspace = true }
@@ -86,3 +86,6 @@ tower-cookies = { version = "0.11", features = ["private"] }
 reqwest = "0.12"
 tracing = "0.1"
 base64 = "0.22.1"
+time = "0.3"
+itertools = "0.14"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
