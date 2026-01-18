@@ -174,14 +174,9 @@ impl book::Repository for SqlRepository {
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let book = Entity::load()
-            .filter_by_pub_id(item.pub_id())
-            .one(&txn)
-            .await?
-            .ok_or(anyhow::anyhow!("Book not found"))?;
-
-        let book_domain = book
-            .into_active_model()
+        let book_domain = ActiveModel::builder()
+            .set_id(item.id())
+            .set_pub_id(item.pub_id())
             .set_title(item.title().to_string())
             .set_author(item.author().to_string())
             .set_price(item.price())
