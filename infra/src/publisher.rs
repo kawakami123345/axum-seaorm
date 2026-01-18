@@ -2,7 +2,7 @@ use crate::BeginWithUser;
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
@@ -18,11 +18,28 @@ pub struct Model {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub created_by: Uuid,
     pub updated_by: Uuid,
+
     #[sea_orm(has_many)]
     pub books: HasMany<super::book::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl ModelEx {
+    pub fn to_domain(self) -> anyhow::Result<publisher::Publisher> {
+        let name = publisher::vo::PublisherName::new(self.name)
+            .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
+        Ok(publisher::Publisher::reconstruct(
+            self.id,
+            self.pub_id,
+            name,
+            self.created_at,
+            self.updated_at,
+            self.created_by,
+            self.updated_by,
+        ))
+    }
+}
 
 pub struct SqlRepository {
     pub(crate) db: DatabaseConnection,
@@ -32,77 +49,67 @@ impl SqlRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
-
-    pub fn to_domain(model: Model) -> anyhow::Result<publisher::Publisher> {
-        let name = publisher::vo::PublisherName::new(model.name)
-            .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
-        Ok(publisher::Publisher::reconstruct(
-            model.id,
-            model.pub_id,
-            name,
-            model.created_at,
-            model.updated_at,
-            model.created_by,
-            model.updated_by,
-        ))
-    }
 }
 
 #[async_trait]
 impl publisher::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
-        let publishers = Entity::find().all(&self.db).await?;
-        publishers.into_iter().map(Self::to_domain).collect()
+        Entity::load()
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| m.to_domain())
+            .collect()
     }
 
     async fn find_by_pub_id(
         &self,
         pub_id: uuid::Uuid,
     ) -> anyhow::Result<Option<publisher::Publisher>> {
-        let publisher = Entity::find()
-            .filter(Column::PubId.eq(pub_id))
+        Entity::load()
+            .filter_by_pub_id(pub_id)
             .one(&self.db)
-            .await?;
-        match publisher {
-            Some(p) => Ok(Some(Self::to_domain(p)?)),
-            None => Ok(None),
-        }
+            .await?
+            .map(|m| m.to_domain())
+            .transpose()
     }
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let active_model = ActiveModel {
-            pub_id: Set(item.pub_id()),
-            name: Set(item.name().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(*item.created_by()),
-            updated_by: Set(*item.updated_by()),
-            ..Default::default()
-        };
+        let publisher_domain = ActiveModel::builder()
+            .set_pub_id(item.pub_id())
+            .set_name(item.name().to_string())
+            .set_created_at(item.created_at())
+            .set_updated_at(item.updated_at())
+            .set_created_by(*item.created_by())
+            .set_updated_by(*item.updated_by())
+            .insert(&txn)
+            .await?
+            .to_domain()?;
 
-        let result = active_model.insert(&txn).await?;
         txn.commit().await?;
-        Ok(Self::to_domain(result)?)
+
+        Ok(publisher_domain)
     }
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let active_model = ActiveModel {
-            id: Set(item.id()),
-            pub_id: Set(item.pub_id()),
-            name: Set(item.name().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(*item.created_by()),
-            updated_by: Set(*item.updated_by()),
-        };
+        let publisher_domain = ActiveModel::builder()
+            .set_pub_id(item.pub_id())
+            .set_name(item.name().to_string())
+            .set_created_at(item.created_at())
+            .set_updated_at(item.updated_at())
+            .set_created_by(*item.created_by())
+            .set_updated_by(*item.updated_by())
+            .update(&txn)
+            .await?
+            .to_domain()?;
 
-        let result = active_model.update(&txn).await?;
         txn.commit().await?;
-        Ok(Self::to_domain(result)?)
+
+        Ok(publisher_domain)
     }
 
     async fn delete(

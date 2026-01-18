@@ -495,7 +495,7 @@ mod tests {
         async fn update(&self, _item: shop::Shop) -> anyhow::Result<shop::Shop> {
             panic!("Not implemented")
         }
-        async fn delete(&self, _item: shop::Shop) -> anyhow::Result<()> {
+        async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
             panic!("Not implemented")
         }
     }

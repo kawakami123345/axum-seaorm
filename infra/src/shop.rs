@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
+
+use crate::BeginWithUser;
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
@@ -17,11 +19,28 @@ pub struct Model {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub created_by: Uuid,
     pub updated_by: Uuid,
+
     #[sea_orm(has_many)]
     pub books: HasMany<super::book::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl ModelEx {
+    pub fn to_domain(self) -> anyhow::Result<shop::Shop> {
+        let name = shop::vo::ShopName::new(self.name)
+            .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
+        Ok(shop::Shop::reconstruct(
+            self.id,
+            self.pub_id,
+            name,
+            self.created_at,
+            self.updated_at,
+            self.created_by,
+            self.updated_by,
+        ))
+    }
+}
 
 pub struct SqlRepository {
     pub(crate) db: DatabaseConnection,
@@ -31,72 +50,72 @@ impl SqlRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
-
-    pub fn to_domain(model: Model) -> anyhow::Result<shop::Shop> {
-        let name = shop::vo::ShopName::new(model.name)
-            .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
-        Ok(shop::Shop::reconstruct(
-            model.id,
-            model.pub_id,
-            name,
-            model.created_at,
-            model.updated_at,
-            model.created_by,
-            model.updated_by,
-        ))
-    }
 }
 
 #[async_trait]
 impl shop::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<shop::Shop>> {
-        let shops = Entity::find().all(&self.db).await?;
-        shops.into_iter().map(Self::to_domain).collect()
+        Entity::load()
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| m.to_domain())
+            .collect()
     }
 
     async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<shop::Shop>> {
-        let shop = Entity::find()
-            .filter(Column::PubId.eq(pub_id))
+        Entity::load()
+            .filter_by_pub_id(pub_id)
             .one(&self.db)
-            .await?;
-        match shop {
-            Some(s) => Ok(Some(Self::to_domain(s)?)),
-            None => Ok(None),
-        }
+            .await?
+            .map(|m| m.to_domain())
+            .transpose()
     }
 
     async fn create(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
-        let active_model = ActiveModel {
-            pub_id: Set(item.pub_id()),
-            name: Set(item.name().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(*item.created_by()),
-            updated_by: Set(*item.updated_by()),
-            ..Default::default()
-        };
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let result = active_model.insert(&self.db).await?;
-        Ok(Self::to_domain(result)?)
+        let shop_domain = ActiveModel::builder()
+            .set_pub_id(item.pub_id())
+            .set_name(item.name().to_string())
+            .set_created_at(item.created_at())
+            .set_updated_at(item.updated_at())
+            .set_created_by(*item.created_by())
+            .set_updated_by(*item.updated_by())
+            .insert(&txn)
+            .await?
+            .to_domain()?;
+
+        txn.commit().await?;
+
+        Ok(shop_domain)
     }
 
     async fn update(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
-        let active_model = ActiveModel {
-            id: Set(item.id()),
-            pub_id: Set(item.pub_id()),
-            name: Set(item.name().to_string()),
-            created_at: Set(item.created_at()),
-            updated_at: Set(item.updated_at()),
-            created_by: Set(*item.created_by()),
-            updated_by: Set(*item.updated_by()),
-        };
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let result = active_model.update(&self.db).await?;
-        Ok(Self::to_domain(result)?)
+        let shop_domain = ActiveModel::builder()
+            .set_pub_id(item.pub_id())
+            .set_name(item.name().to_string())
+            .set_created_at(item.created_at())
+            .set_updated_at(item.updated_at())
+            .set_created_by(*item.created_by())
+            .set_updated_by(*item.updated_by())
+            .update(&txn)
+            .await?
+            .to_domain()?;
+
+        txn.commit().await?;
+
+        Ok(shop_domain)
     }
 
-    async fn delete(&self, item: shop::Shop) -> anyhow::Result<()> {
+    async fn delete(&self, item: shop::Shop, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
+        let txn = self.db.begin_with_user(&deleted_by).await?;
+
         Entity::delete_by_id(item.id()).exec(&self.db).await?;
+        txn.commit().await?;
+
         Ok(())
     }
 }

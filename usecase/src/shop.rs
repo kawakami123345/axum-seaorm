@@ -1,7 +1,8 @@
 use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub struct Service {
     repo: Arc<dyn shop::Repository>,
@@ -99,10 +100,16 @@ impl Service {
                 pub_id
             )))?;
 
-        self.repo.delete(shop).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        self.repo
+            .delete(
+                shop,
+                Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Database error in create book (find publisher): {:?}", e);
+                UseCaseError::DatabaseError
+            })?;
 
         Ok(())
     }
@@ -177,7 +184,7 @@ mod tests {
         async fn update(&self, _item: shop::Shop) -> anyhow::Result<shop::Shop> {
             panic!("Not implemented")
         }
-        async fn delete(&self, _item: shop::Shop) -> anyhow::Result<()> {
+        async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
             panic!("Not implemented")
         }
     }
