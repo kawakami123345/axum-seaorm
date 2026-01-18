@@ -27,8 +27,8 @@ pub struct Model {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl ModelEx {
-    pub fn to_domain(self) -> anyhow::Result<shop::Shop> {
-        let name = shop::vo::ShopName::new(self.name)
+    pub fn to_domain(&self) -> anyhow::Result<shop::Shop> {
+        let name = shop::vo::ShopName::new(self.name.clone())
             .map_err(|e| anyhow::anyhow!("Invalid name in DB: {}", e))?;
         Ok(shop::Shop::reconstruct(
             self.id,

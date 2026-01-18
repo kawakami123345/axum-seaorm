@@ -38,10 +38,10 @@ pub struct Model {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl ModelEx {
-    fn to_domain(self) -> anyhow::Result<book::Book> {
-        let title = book::vo::BookTitle::new(self.title)
+    fn to_domain(&self) -> anyhow::Result<book::Book> {
+        let title = book::vo::BookTitle::new(self.title.clone())
             .map_err(|e| anyhow::anyhow!("Invalid title in DB: {}", e))?;
-        let author = book::vo::BookAuthor::new(self.author)
+        let author = book::vo::BookAuthor::new(self.author.clone())
             .map_err(|e| anyhow::anyhow!("Invalid author in DB: {}", e))?;
         let price = book::vo::BookPrice::new(self.price)
             .map_err(|e| anyhow::anyhow!("Invalid price in DB: {}", e))?;
@@ -173,7 +173,9 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            .set_publisher_id(publisher_model.id)
+            //ここでpublisherをセットしないとエラーが出る
+            .set_publisher(publisher_model.into_active_model())
+            //shopはidだけでいい？Option<i32>だから？
             .set_shop_id(shop_model.map(|s| s.id))
             .insert(&txn)
             .await?
@@ -225,6 +227,7 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
+            //ここではidだけセットすれば大丈夫？
             .set_publisher_id(publisher_model.id)
             .set_shop_id(shop_model.map(|s| s.id))
             .update(&txn)
