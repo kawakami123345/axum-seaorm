@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
+};
 
 use crate::BeginWithUser;
 
@@ -120,6 +122,7 @@ impl SqlRepository {
 impl book::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
         Entity::load()
+            .order_by(Column::Id, sea_orm::Order::Desc)
             .with(super::publisher::Entity)
             .with(super::shop::Entity)
             .all(&self.db)

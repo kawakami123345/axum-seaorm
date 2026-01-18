@@ -2,7 +2,7 @@ use crate::BeginWithUser;
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryOrder};
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
@@ -55,6 +55,7 @@ impl SqlRepository {
 impl publisher::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<publisher::Publisher>> {
         Entity::load()
+            .order_by(Column::Id, sea_orm::Order::Desc)
             .all(&self.db)
             .await?
             .into_iter()
