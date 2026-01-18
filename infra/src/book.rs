@@ -146,24 +146,6 @@ impl book::Repository for SqlRepository {
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let publisher_model = super::publisher::Entity::load()
-            .filter_by_pub_id(item.publisher().pub_id())
-            .one(&txn)
-            .await?
-            .ok_or(anyhow::anyhow!("Publisher not found"))?;
-
-        let shop_model = if let Some(s) = item.shop() {
-            Some(
-                super::shop::Entity::load()
-                    .filter_by_pub_id(s.pub_id())
-                    .one(&txn)
-                    .await?
-                    .ok_or(anyhow::anyhow!("Shop not found"))?,
-            )
-        } else {
-            None
-        };
-
         let book_domain = ActiveModel::builder()
             .set_pub_id(item.pub_id())
             .set_title(item.title().to_string())
@@ -177,9 +159,9 @@ impl book::Repository for SqlRepository {
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
             // 基本的にset_publisher_idではなくset_publisherで更新する
-            .set_publisher(publisher_model.into_active_model())
+            .set_publisher(super::publisher::ActiveModel::builder().set_id(item.publisher().id()))
             // shopはidだけでいい？Option<i32>だから？
-            .set_shop_id(shop_model.map(|s| s.id))
+            .set_shop_id(item.shop().clone().map(|s| s.id()))
             .insert(&txn)
             .await?
             .to_domain()?;
@@ -198,24 +180,6 @@ impl book::Repository for SqlRepository {
             .await?
             .ok_or(anyhow::anyhow!("Book not found"))?;
 
-        let publisher_model = super::publisher::Entity::load()
-            .filter_by_pub_id(item.publisher().pub_id())
-            .one(&txn)
-            .await?
-            .ok_or(anyhow::anyhow!("Publisher not found"))?;
-
-        let shop_model = if let Some(s) = item.shop() {
-            Some(
-                super::shop::Entity::load()
-                    .filter_by_pub_id(s.pub_id())
-                    .one(&txn)
-                    .await?
-                    .ok_or(anyhow::anyhow!("Shop not found"))?,
-            )
-        } else {
-            None
-        };
-
         let book_domain = book
             .into_active_model()
             .set_title(item.title().to_string())
@@ -228,9 +192,9 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            .set_publisher(publisher_model.into_active_model())
+            .set_publisher(super::publisher::ActiveModel::builder().set_id(item.publisher().id()))
             //bookのload()時に.with(super::shop::Entity)を入れるとset_shop_idでは更新できない
-            .set_shop_id(shop_model.map(|s| s.id))
+            .set_shop_id(item.shop().clone().map(|s| s.id()))
             .update(&txn)
             .await?
             .to_domain()?;
