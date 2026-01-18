@@ -173,9 +173,9 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            //ここでpublisherをセットしないとエラーが出る
+            // 基本的にset_publisher_idではなくset_publisherで更新する
             .set_publisher(publisher_model.into_active_model())
-            //shopはidだけでいい？Option<i32>だから？
+            // shopはidだけでいい？Option<i32>だから？
             .set_shop_id(shop_model.map(|s| s.id))
             .insert(&txn)
             .await?
@@ -191,8 +191,6 @@ impl book::Repository for SqlRepository {
 
         let book = Entity::load()
             .filter_by_pub_id(item.pub_id())
-            .with(super::publisher::Entity)
-            .with(super::shop::Entity)
             .one(&txn)
             .await?
             .ok_or(anyhow::anyhow!("Book not found"))?;
@@ -227,8 +225,8 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            //ここではidだけセットすれば大丈夫？
-            .set_publisher_id(publisher_model.id)
+            .set_publisher(publisher_model.into_active_model())
+            //bookのload()時に.with(super::shop::Entity)を入れるとset_shop_idでは更新できない
             .set_shop_id(shop_model.map(|s| s.id))
             .update(&txn)
             .await?
