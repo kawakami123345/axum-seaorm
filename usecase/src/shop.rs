@@ -44,7 +44,7 @@ impl Service {
     ) -> Result<ResponseDto, UseCaseError> {
         let name = shop::vo::ShopName::new(dto.name)?;
 
-        let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, ctx.user_id().clone());
+        let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
 
         let created = self.repo.create(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -74,7 +74,7 @@ impl Service {
 
         let name = shop::vo::ShopName::new(dto.name)?;
 
-        shop.update(name, ctx.user_id().clone())
+        shop.update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         let updated = self.repo.update(shop).await.map_err(|e| {

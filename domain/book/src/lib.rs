@@ -58,7 +58,7 @@ impl Book {
             price,
             created_at: now,
             updated_at: now,
-            created_by: created_by.clone(),
+            created_by,
             updated_by: created_by,
             user_id,
         }

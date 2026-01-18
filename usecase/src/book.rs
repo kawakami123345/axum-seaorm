@@ -51,7 +51,7 @@ impl Service {
             .into_iter()
             .filter(|b| {
                 (ctx.is_admin() || b.user_id() == ctx.user_id())
-                    && b.applied_at().map_or(false, |at| at.year() == year)
+                    && b.applied_at().is_some_and(|at| at.year() == year)
             })
             .map(ResponseDto::from)
             .collect();
@@ -125,8 +125,8 @@ impl Service {
             shop,
             format,
             price,
-            ctx.user_id.clone(),
-            ctx.user_id.clone(),
+            ctx.user_id,
+            ctx.user_id,
         );
         self.repo.create(book.clone()).await.map_err(|e| {
             eprintln!("Database error in create book: {:?}", e);
@@ -195,16 +195,8 @@ impl Service {
             None
         };
 
-        book.update(
-            title,
-            author,
-            publisher,
-            shop,
-            format,
-            price,
-            ctx.user_id.clone(),
-        )
-        .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
+        book.update(title, author, publisher, shop, format, price, ctx.user_id)
+            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo.update(book.clone()).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -226,13 +218,10 @@ impl Service {
             .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        self.repo
-            .delete(book, ctx.user_id.clone())
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?;
+        self.repo.delete(book, ctx.user_id).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
         Ok(())
     }
     pub async fn change_applied_at(
@@ -252,7 +241,7 @@ impl Service {
             .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        book.change_applied_at(dto.applied_at, ctx.user_id.clone())
+        book.change_applied_at(dto.applied_at, ctx.user_id)
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         self.repo.update(book.clone()).await.map_err(|e| {
@@ -393,9 +382,9 @@ mod tests {
                 book::vo::BookPrice::new(item.price()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by().clone(),
-                item.updated_by().clone(),
-                item.user_id().clone(),
+                *item.created_by(),
+                *item.updated_by(),
+                *item.user_id(),
             );
 
             store.push(new_book.clone());

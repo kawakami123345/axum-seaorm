@@ -34,7 +34,7 @@ impl Publisher {
             name,
             created_at: now,
             updated_at: now,
-            created_by: created_by.clone(),
+            created_by,
             updated_by: created_by,
         }
     }
@@ -66,7 +66,7 @@ impl Publisher {
         self.pub_id
     }
     pub fn name(&self) -> &str {
-        &self.name.value()
+        self.name.value()
     }
     pub fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.created_at

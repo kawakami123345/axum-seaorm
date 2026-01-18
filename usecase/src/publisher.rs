@@ -43,7 +43,7 @@ impl Service {
         dto: CreateDto,
     ) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
-        let publisher = publisher::Publisher::new(Uuid::now_v7(), name, ctx.user_id().clone());
+        let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
         let result = self.repo.create(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
@@ -72,7 +72,7 @@ impl Service {
             )))?;
 
         publisher
-            .update(name, ctx.user_id().clone())
+            .update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         let result = self.repo.update(publisher).await.map_err(|e| {
@@ -97,7 +97,7 @@ impl Service {
             )))?;
 
         self.repo
-            .delete(publisher, ctx.user_id().clone())
+            .delete(publisher, *ctx.user_id())
             .await
             .map_err(|e| {
                 eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -179,8 +179,8 @@ mod tests {
                 publisher::vo::PublisherName::new(item.name().to_string()).unwrap(),
                 item.created_at(),
                 item.updated_at(),
-                item.created_by().clone(),
-                item.updated_by().clone(),
+                *item.created_by(),
+                *item.updated_by(),
             );
 
             store.push(new_publisher.clone());

@@ -70,15 +70,15 @@ impl publisher::Repository for SqlRepository {
     }
 
     async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
-        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         let active_model = ActiveModel {
             pub_id: Set(item.pub_id()),
             name: Set(item.name().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().clone()),
-            updated_by: Set(item.updated_by().clone()),
+            created_by: Set(*item.created_by()),
+            updated_by: Set(*item.updated_by()),
             ..Default::default()
         };
 
@@ -88,7 +88,7 @@ impl publisher::Repository for SqlRepository {
     }
 
     async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
-        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         let active_model = ActiveModel {
             id: Set(item.id()),
@@ -96,8 +96,8 @@ impl publisher::Repository for SqlRepository {
             name: Set(item.name().to_string()),
             created_at: Set(item.created_at()),
             updated_at: Set(item.updated_at()),
-            created_by: Set(item.created_by().clone()),
-            updated_by: Set(item.updated_by().clone()),
+            created_by: Set(*item.created_by()),
+            updated_by: Set(*item.updated_by()),
         };
 
         let result = active_model.update(&txn).await?;

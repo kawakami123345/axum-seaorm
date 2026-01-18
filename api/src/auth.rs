@@ -99,11 +99,11 @@ pub async fn require_auth(
     next: Next,
 ) -> Response {
     // セッションCookieが存在するか確認
-    if let Some(cookie) = cookies.private(&state.cookie_key).get(SESSION_COOKIE_NAME) {
-        if let Ok(session) = serde_json::from_str::<usecase::UserContext>(cookie.value()) {
-            request.extensions_mut().insert(session);
-            return next.run(request).await;
-        }
+    if let Some(cookie) = cookies.private(&state.cookie_key).get(SESSION_COOKIE_NAME)
+        && let Ok(session) = serde_json::from_str::<usecase::UserContext>(cookie.value())
+    {
+        request.extensions_mut().insert(session);
+        return next.run(request).await;
     }
     (axum::http::StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
 }
@@ -230,23 +230,19 @@ async fn callback(
     session_cookie.set_same_site(SameSite::Lax);
     #[cfg(not(debug_assertions))]
     session_cookie.set_secure(true);
-    session_cookie.set_max_age(Some(
-        time::Duration::hours(24)
-            .try_into()
-            .unwrap_or_else(|_| time::Duration::seconds(86400).try_into().unwrap()),
-    ));
+    session_cookie.set_max_age(Some(time::Duration::hours(24)));
 
     cookies.private(cookie_key).add(session_cookie);
 
     // 5. Cleanup & Redirect
     let mut delete_nonce = Cookie::new(NONCE_COOKIE_NAME, "");
     delete_nonce.set_path("/");
-    delete_nonce.set_max_age(Some(time::Duration::ZERO.try_into().unwrap()));
+    delete_nonce.set_max_age(Some(time::Duration::ZERO));
     cookies.private(cookie_key).remove(delete_nonce);
 
     let mut delete_state = Cookie::new(STATE_COOKIE_NAME, "");
     delete_state.set_path("/");
-    delete_state.set_max_age(Some(time::Duration::ZERO.try_into().unwrap()));
+    delete_state.set_max_age(Some(time::Duration::ZERO));
     cookies.private(cookie_key).remove(delete_state);
 
     let frontend_url =
@@ -258,7 +254,7 @@ async fn callback(
 pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl IntoResponse {
     let mut cookie = Cookie::new(SESSION_COOKIE_NAME, "");
     cookie.set_path("/");
-    cookie.set_max_age(Some(time::Duration::seconds(0).try_into().unwrap()));
+    cookie.set_max_age(Some(time::Duration::seconds(0)));
 
     cookies.private(&state.cookie_key).remove(cookie);
 

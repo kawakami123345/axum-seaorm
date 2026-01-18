@@ -141,7 +141,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         let publisher_model = super::publisher::Entity::load()
             .filter_by_pub_id(item.publisher().pub_id())
@@ -170,9 +170,9 @@ impl book::Repository for SqlRepository {
             .set_format(item.format().to_string())
             .set_created_at(item.created_at())
             .set_updated_at(item.updated_at())
-            .set_created_by(item.created_by().clone())
-            .set_updated_by(item.updated_by().clone())
-            .set_user_id(item.user_id().clone())
+            .set_created_by(*item.created_by())
+            .set_updated_by(*item.updated_by())
+            .set_user_id(*item.user_id())
             .set_publisher(publisher_model.into_active_model());
         if let Some(shop) = shop_model {
             active_model = active_model.set_shop(shop.into_active_model());
@@ -185,7 +185,7 @@ impl book::Repository for SqlRepository {
     }
 
     async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
-        let txn = self.db.begin_with_user(&item.updated_by()).await?;
+        let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         let book = Entity::load()
             .filter_by_pub_id(item.pub_id())
@@ -204,7 +204,7 @@ impl book::Repository for SqlRepository {
             .set_applied_at(item.applied_at())
             .set_format(item.format().to_string())
             .set_updated_at(item.updated_at())
-            .set_updated_by(item.updated_by().clone());
+            .set_updated_by(*item.updated_by());
 
         if book.publisher.as_ref().unwrap().pub_id != item.publisher().pub_id() {
             let publisher_model = super::publisher::Entity::load()
