@@ -186,7 +186,6 @@ impl book::Repository for SqlRepository {
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
             .set_publisher(super::publisher::ActiveModel::builder().set_id(item.publisher().id()))
-            //bookのload()時に.with(super::shop::Entity)を入れるとset_shop_idでは更新できない
             .set_shop_id(item.shop().clone().map(|s| s.id()))
             .update(&txn)
             .await?
