@@ -9,6 +9,8 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
+    usecase::cedar::init()?;
+
     // 1. Database Connection
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(db_url).await?;

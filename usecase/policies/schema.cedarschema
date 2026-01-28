@@ -1,0 +1,13 @@
+entity User {
+  user_id: String,
+  is_admin: Bool
+}
+
+entity Book {
+  user_id: String
+}
+
+action GetBook appliesTo {
+  principal: [User],
+  resource: [Book]
+}

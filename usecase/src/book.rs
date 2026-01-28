@@ -1,4 +1,4 @@
-use crate::{UserContext, error::UseCaseError};
+use crate::{UserContext, cedar, error::UseCaseError};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -24,16 +24,25 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = cedar::partial_authorize_books(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let books = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
 
-        let response_dtos = books
-            .into_iter()
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
-            .map(ResponseDto::from)
-            .collect();
+        let books = match partial {
+            cedar::PartialDecision::Allow => books,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_books_batch(ctx, &residuals, &books)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
+
+        let response_dtos = books.into_iter().map(ResponseDto::from).collect();
         Ok(response_dtos)
     }
 
