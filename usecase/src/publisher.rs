@@ -1,4 +1,4 @@
-use crate::{UserContext, error::UseCaseError};
+use crate::{UserContext, cedar, error::UseCaseError};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -13,15 +13,29 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
+    pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = cedar::partial_authorize_publisher_list(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let publishers = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
+
+        let publishers = match partial {
+            cedar::PartialDecision::Allow => publishers,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_publisher_list_batch(ctx, &residuals, &publishers)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
+
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(&self, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(&self, ctx: &UserContext, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
@@ -34,6 +48,9 @@ impl Service {
                 "Publisher not found with pub_id = {}",
                 pub_id
             )))?;
+
+        cedar::authorize_publisher_get(ctx, &publisher)?;
+
         Ok(publisher.into())
     }
 
@@ -44,6 +61,9 @@ impl Service {
     ) -> Result<ResponseDto, UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
+
+        cedar::authorize_publisher_create(ctx, &publisher)?;
+
         let result = self.repo.create(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
@@ -71,6 +91,8 @@ impl Service {
                 pub_id
             )))?;
 
+        cedar::authorize_publisher_update(ctx, &publisher)?;
+
         publisher
             .update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
@@ -95,6 +117,8 @@ impl Service {
                 "Publisher with pub_id = {} not found",
                 pub_id
             )))?;
+
+        cedar::authorize_publisher_delete(ctx, &publisher)?;
 
         self.repo
             .delete(publisher, *ctx.user_id())
@@ -229,7 +253,10 @@ mod tests {
         let created = service.create(&ctx, dto).await.expect("Failed to create");
         assert_eq!(created.name, "Test Publisher");
 
-        let fetched = service.get(created.pub_id).await.expect("Failed to get");
+        let fetched = service
+            .get(&ctx, created.pub_id)
+            .await
+            .expect("Failed to get");
         assert_eq!(fetched.name, "Test Publisher");
         assert_eq!(fetched.pub_id, created.pub_id);
     }
@@ -258,7 +285,7 @@ mod tests {
             .await
             .expect("Failed to create 2");
 
-        let all = service.get_all().await.expect("Failed to get all");
+        let all = service.get_all(&ctx).await.expect("Failed to get all");
         assert_eq!(all.len(), 2);
     }
 
@@ -285,7 +312,10 @@ mod tests {
             .expect("Failed to update");
         assert_eq!(updated.name, "Updated Name");
 
-        let fetched = service.get(created.pub_id).await.expect("Failed to get");
+        let fetched = service
+            .get(&ctx, created.pub_id)
+            .await
+            .expect("Failed to get");
         assert_eq!(fetched.name, "Updated Name");
     }
 
@@ -307,7 +337,7 @@ mod tests {
             .await
             .expect("Failed to delete");
 
-        let result = service.get(created.pub_id).await;
+        let result = service.get(&ctx, created.pub_id).await;
         assert!(result.is_err());
         match result {
             Err(UseCaseError::NotFound(_)) => (),

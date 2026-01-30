@@ -1,4 +1,4 @@
-use crate::{UserContext, error::UseCaseError};
+use crate::{UserContext, cedar, error::UseCaseError};
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, sync::Arc};
 use utoipa::ToSchema;
@@ -13,16 +13,33 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
+    pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = cedar::partial_authorize_shop_list(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let shops = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
+        let shops = match partial {
+            cedar::PartialDecision::Allow => shops,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_shop_list_batch(ctx, &residuals, &shops)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
+
         let dtos = shops.into_iter().map(ResponseDto::from).collect();
         Ok(dtos)
     }
 
-    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(
+        &self,
+        ctx: &UserContext,
+        pub_id: uuid::Uuid,
+    ) -> Result<ResponseDto, UseCaseError> {
         let shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -35,6 +52,9 @@ impl Service {
                 "Shop with pub_id = {} not found",
                 pub_id
             )))?;
+
+        cedar::authorize_shop_get(ctx, &shop)?;
+
         Ok(shop.into())
     }
 
@@ -46,6 +66,8 @@ impl Service {
         let name = shop::vo::ShopName::new(dto.name)?;
 
         let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
+
+        cedar::authorize_shop_create(ctx, &shop)?;
 
         let created = self.repo.create(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -73,6 +95,8 @@ impl Service {
                 pub_id
             )))?;
 
+        cedar::authorize_shop_update(ctx, &shop)?;
+
         let name = shop::vo::ShopName::new(dto.name)?;
 
         shop.update(name, *ctx.user_id())
@@ -86,7 +110,11 @@ impl Service {
         Ok(updated.into())
     }
 
-    pub async fn delete(&self, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(
+        &self,
+        ctx: &UserContext,
+        pub_id: uuid::Uuid,
+    ) -> Result<(), UseCaseError> {
         let shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -99,6 +127,8 @@ impl Service {
                 "Shop with pub_id = {} not found",
                 pub_id
             )))?;
+
+        cedar::authorize_shop_delete(ctx, &shop)?;
 
         self.repo
             .delete(
@@ -209,7 +239,10 @@ mod tests {
         let created = service.create(&ctx, dto).await.expect("Failed to create");
         assert_eq!(created.name, "Test Shop");
 
-        let fetched = service.get(created.pub_id).await.expect("Failed to get");
+        let fetched = service
+            .get(&ctx, created.pub_id)
+            .await
+            .expect("Failed to get");
         assert_eq!(fetched.pub_id, created.pub_id);
     }
 }

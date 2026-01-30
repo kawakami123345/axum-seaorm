@@ -7,7 +7,98 @@ entity Book {
   user_id: String
 };
 
+entity Publisher {
+  created_by: String
+};
+
+entity Shop {
+  created_by: String
+};
+
+entity Dashboard;
+
+// MEMO: Endpointごとに作るのがベストプラクティス寄り
+action ListBooks appliesTo {
+  principal: [User],
+  resource: [Book]
+};
+
 action GetBook appliesTo {
   principal: [User],
   resource: [Book]
+};
+
+action CreateBook appliesTo {
+  principal: [User],
+  resource: [Book]
+};
+
+action UpdateBook appliesTo {
+  principal: [User],
+  resource: [Book]
+};
+
+action DeleteBook appliesTo {
+  principal: [User],
+  resource: [Book]
+};
+
+action ChangeBookAppliedAt appliesTo {
+  principal: [User],
+  resource: [Book]
+};
+
+action ListPublishers appliesTo {
+  principal: [User],
+  resource: [Publisher]
+};
+
+action GetPublisher appliesTo {
+  principal: [User],
+  resource: [Publisher]
+};
+
+action CreatePublisher appliesTo {
+  principal: [User],
+  resource: [Publisher]
+};
+
+action UpdatePublisher appliesTo {
+  principal: [User],
+  resource: [Publisher]
+};
+
+action DeletePublisher appliesTo {
+  principal: [User],
+  resource: [Publisher]
+};
+
+action ListShops appliesTo {
+  principal: [User],
+  resource: [Shop]
+};
+
+action GetShop appliesTo {
+  principal: [User],
+  resource: [Shop]
+};
+
+action CreateShop appliesTo {
+  principal: [User],
+  resource: [Shop]
+};
+
+action UpdateShop appliesTo {
+  principal: [User],
+  resource: [Shop]
+};
+
+action DeleteShop appliesTo {
+  principal: [User],
+  resource: [Shop]
+};
+
+action GetAnnualSummary appliesTo {
+  principal: [User],
+  resource: [Dashboard]
 };

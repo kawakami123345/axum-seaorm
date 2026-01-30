@@ -24,7 +24,7 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let partial = cedar::partial_authorize_books(ctx)?;
+        let partial = cedar::partial_authorize_book_list(ctx)?;
         if matches!(partial, cedar::PartialDecision::Deny) {
             return Ok(Vec::new());
         }
@@ -37,7 +37,7 @@ impl Service {
         let books = match partial {
             cedar::PartialDecision::Allow => books,
             cedar::PartialDecision::Residual(residuals) => {
-                cedar::authorize_books_batch(ctx, &residuals, &books)?
+                cedar::authorize_book_list_batch(ctx, &residuals, &books)?
             }
             cedar::PartialDecision::Deny => Vec::new(),
         };
@@ -51,19 +51,30 @@ impl Service {
         ctx: &UserContext,
         year: i32,
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = cedar::partial_authorize_book_list(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let books = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
 
-        let response_dtos = books
+        let books: Vec<book::Book> = books
             .into_iter()
-            .filter(|b| {
-                (ctx.is_admin() || b.user_id() == ctx.user_id())
-                    && b.applied_at().is_some_and(|at| at.year() == year)
-            })
-            .map(ResponseDto::from)
+            .filter(|b| b.applied_at().is_some_and(|at| at.year() == year))
             .collect();
+
+        let books = match partial {
+            cedar::PartialDecision::Allow => books,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_book_list_batch(ctx, &residuals, &books)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
+
+        let response_dtos = books.into_iter().map(ResponseDto::from).collect();
 
         Ok(response_dtos)
     }
@@ -81,8 +92,12 @@ impl Service {
                 eprintln!("Database error in create book (find publisher): {:?}", e);
                 UseCaseError::DatabaseError
             })?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".into()))?;
+
+        cedar::authorize_book_get(ctx, &book).map_err(|e| match e {
+            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+            _ => e,
+        })?;
 
         Ok(book.into())
     }
@@ -137,6 +152,9 @@ impl Service {
             ctx.user_id,
             ctx.user_id,
         );
+
+        cedar::authorize_book_create(ctx, &book)?;
+
         self.repo.create(book.clone()).await.map_err(|e| {
             eprintln!("Database error in create book: {:?}", e);
             UseCaseError::DatabaseError
@@ -167,8 +185,12 @@ impl Service {
                 eprintln!("Database error in create book (find publisher): {:?}", e);
                 UseCaseError::DatabaseError
             })?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
+
+        cedar::authorize_book_update(ctx, &book).map_err(|e| match e {
+            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+            _ => e,
+        })?;
 
         // Resolve Publisher
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
@@ -224,8 +246,12 @@ impl Service {
                 eprintln!("Database error in create book (find publisher): {:?}", e);
                 UseCaseError::DatabaseError
             })?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
+
+        cedar::authorize_book_delete(ctx, &book).map_err(|e| match e {
+            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+            _ => e,
+        })?;
 
         self.repo.delete(book, ctx.user_id).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -247,8 +273,12 @@ impl Service {
                 eprintln!("Database error in create book (find publisher): {:?}", e);
                 UseCaseError::DatabaseError
             })?
-            .filter(|b| ctx.is_admin() || b.user_id() == ctx.user_id())
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
+
+        cedar::authorize_book_change_applied_at(ctx, &book).map_err(|e| match e {
+            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+            _ => e,
+        })?;
 
         book.change_applied_at(dto.applied_at, ctx.user_id)
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;

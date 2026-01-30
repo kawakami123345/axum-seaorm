@@ -1,4 +1,4 @@
-use crate::error::UseCaseError;
+use crate::{UserContext, cedar, error::UseCaseError};
 use chrono::Datelike;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,12 @@ impl Service {
         Self { book_repo }
     }
 
-    pub async fn get_annual_summary(&self) -> Result<Vec<DashboardDto>, UseCaseError> {
+    pub async fn get_annual_summary(
+        &self,
+        ctx: &UserContext,
+    ) -> Result<Vec<DashboardDto>, UseCaseError> {
+        cedar::authorize_dashboard_get_annual_summary(ctx)?;
+
         let books = self
             .book_repo
             .find_all()
