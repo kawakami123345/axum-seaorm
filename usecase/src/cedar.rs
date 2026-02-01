@@ -47,10 +47,10 @@ pub fn partial_authorize_book_list(ctx: &UserContext) -> Result<PartialDecision,
 
 pub fn authorize_book_list_batch(
     ctx: &UserContext,
-    residual_policies: &PolicySet,
     books: &[book::Book],
 ) -> Result<Vec<book::Book>, UseCaseError> {
-    authorize_books_batch(ctx, ACTION_LIST_BOOKS, residual_policies, books)
+    let policies = policy_set()?;
+    authorize_books_batch(ctx, ACTION_LIST_BOOKS, policies, books)
 }
 
 pub fn authorize_book_get(ctx: &UserContext, book: &book::Book) -> Result<(), UseCaseError> {
@@ -189,7 +189,7 @@ fn partial_authorize(
 fn authorize_books_batch(
     ctx: &UserContext,
     action: &str,
-    residual_policies: &PolicySet,
+    policies: &PolicySet,
     books: &[book::Book],
 ) -> Result<Vec<book::Book>, UseCaseError> {
     let schema = schema()?;
@@ -212,7 +212,7 @@ fn authorize_books_batch(
         )
         .map_err(|e| cedar_error("failed to build cedar request", e))?;
         let mut loader = TestEntityLoader::new(&entities);
-        let decision = residual_policies
+        let decision = policies
             .is_authorized_batched(&request, schema, &mut loader, u32::MAX)
             .map_err(|e| cedar_error("cedar batch evaluation failed", e))?;
         if decision == Decision::Allow {
@@ -230,6 +230,7 @@ fn authorize_publishers_batch(
     publishers: &[publisher::Publisher],
 ) -> Result<Vec<publisher::Publisher>, UseCaseError> {
     let schema = schema()?;
+    let authorizer = Authorizer::new();
     let principal_uid = user_uid(ctx.user_id())?;
     let action_uid = action_uid(action)?;
     let principal = user_entity(ctx.user_id(), ctx.is_admin())?;
@@ -248,10 +249,9 @@ fn authorize_publishers_batch(
             Some(schema),
         )
         .map_err(|e| cedar_error("failed to build cedar request", e))?;
-        let mut loader = TestEntityLoader::new(&entities);
-        let decision = residual_policies
-            .is_authorized_batched(&request, schema, &mut loader, u32::MAX)
-            .map_err(|e| cedar_error("cedar batch evaluation failed", e))?;
+        let decision = authorizer
+            .is_authorized(&request, residual_policies, &entities)
+            .decision();
         if decision == Decision::Allow {
             allowed.push(publisher.clone());
         }
@@ -267,6 +267,7 @@ fn authorize_shops_batch(
     shops: &[shop::Shop],
 ) -> Result<Vec<shop::Shop>, UseCaseError> {
     let schema = schema()?;
+    let authorizer = Authorizer::new();
     let principal_uid = user_uid(ctx.user_id())?;
     let action_uid = action_uid(action)?;
     let principal = user_entity(ctx.user_id(), ctx.is_admin())?;
@@ -285,10 +286,9 @@ fn authorize_shops_batch(
             Some(schema),
         )
         .map_err(|e| cedar_error("failed to build cedar request", e))?;
-        let mut loader = TestEntityLoader::new(&entities);
-        let decision = residual_policies
-            .is_authorized_batched(&request, schema, &mut loader, u32::MAX)
-            .map_err(|e| cedar_error("cedar batch evaluation failed", e))?;
+        let decision = authorizer
+            .is_authorized(&request, residual_policies, &entities)
+            .decision();
         if decision == Decision::Allow {
             allowed.push(shop.clone());
         }
