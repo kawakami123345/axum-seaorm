@@ -73,10 +73,10 @@ impl shop::Repository for SqlRepository {
             .transpose()
     }
 
-    async fn create(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
+    async fn create(&self, item: shop::Shop) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let shop_domain = ActiveModel::builder()
+        ActiveModel::builder()
             .set_pub_id(item.pub_id())
             .set_name(item.name().to_string())
             .set_created_at(item.created_at())
@@ -84,18 +84,16 @@ impl shop::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .insert(&txn)
-            .await?
-            .to_domain()?;
+            .await?;
 
         txn.commit().await?;
-
-        Ok(shop_domain)
+        Ok(())
     }
 
-    async fn update(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
+    async fn update(&self, item: shop::Shop) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let shop_domain = ActiveModel::builder()
+        ActiveModel::builder()
             .set_pub_id(item.pub_id())
             .set_name(item.name().to_string())
             .set_created_at(item.created_at())
@@ -103,20 +101,16 @@ impl shop::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .update(&txn)
-            .await?
-            .to_domain()?;
+            .await?;
 
         txn.commit().await?;
-
-        Ok(shop_domain)
+        Ok(())
     }
 
     async fn delete(&self, item: shop::Shop, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(&deleted_by).await?;
-
         Entity::delete_by_id(item.id()).exec(&self.db).await?;
         txn.commit().await?;
-
         Ok(())
     }
 }

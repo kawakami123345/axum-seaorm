@@ -141,10 +141,10 @@ impl book::Repository for SqlRepository {
             .transpose()
     }
 
-    async fn create(&self, item: book::Book) -> anyhow::Result<book::Book> {
+    async fn create(&self, item: book::Book) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let book_domain = ActiveModel::builder()
+        ActiveModel::builder()
             .set_pub_id(item.pub_id())
             .set_title(item.title().to_string())
             .set_author(item.author().to_string())
@@ -156,23 +156,19 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            // 基本的にset_publisher_idではなくset_publisherで更新する
-            .set_publisher(super::publisher::ActiveModel::builder().set_id(item.publisher().id()))
-            // shopはidだけでいい？Option<i32>だから？
+            .set_publisher_id(item.publisher().id())
             .set_shop_id(item.shop().clone().map(|s| s.id()))
             .insert(&txn)
-            .await?
-            .to_domain()?;
+            .await?;
 
         txn.commit().await?;
-
-        Ok(book_domain)
+        Ok(())
     }
 
-    async fn update(&self, item: book::Book) -> anyhow::Result<book::Book> {
+    async fn update(&self, item: book::Book) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        let book_domain = ActiveModel::builder()
+        ActiveModel::builder()
             .set_id(item.id())
             .set_pub_id(item.pub_id())
             .set_title(item.title().to_string())
@@ -185,19 +181,17 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
-            .set_publisher(super::publisher::ActiveModel::builder().set_id(item.publisher().id()))
+            .set_publisher_id(item.publisher().id())
             .set_shop_id(item.shop().clone().map(|s| s.id()))
             .update(&txn)
-            .await?
-            .to_domain()?;
+            .await?;
 
         txn.commit().await?;
-        Ok(book_domain)
+        Ok(())
     }
 
     async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(&deleted_by).await?;
-
         Entity::delete_by_id(item.id()).exec(&txn).await?;
         txn.commit().await?;
         Ok(())

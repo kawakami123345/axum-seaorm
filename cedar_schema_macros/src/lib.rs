@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use syn::{parse_macro_input, LitStr};
+use syn::{LitStr, parse_macro_input};
 
 #[proc_macro]
 pub fn cedar_schema_consts(input: TokenStream) -> TokenStream {
@@ -30,7 +30,9 @@ fn build_consts(path_literal: &LitStr) -> Result<TokenStream, TokenStream> {
 
     let (entities, actions) = parse_schema(&src);
     if entities.is_empty() && actions.is_empty() {
-        return Err(compile_error("cedar_schema_consts found no entities/actions"));
+        return Err(compile_error(
+            "cedar_schema_consts found no entities/actions",
+        ));
     }
 
     let entity_consts = entities.iter().map(|name| {
@@ -67,10 +69,10 @@ fn parse_schema(src: &str) -> (BTreeSet<String>, BTreeSet<String>) {
             }
             continue;
         }
-        if let Some(name) = line.strip_prefix("action ") {
-            if let Some(name) = take_ident(name) {
-                actions.insert(name.to_string());
-            }
+        if let Some(name) = line.strip_prefix("action ")
+            && let Some(name) = take_ident(name)
+        {
+            actions.insert(name.to_string());
         }
     }
 
@@ -86,11 +88,7 @@ fn take_ident(input: &str) -> Option<&str> {
             break;
         }
     }
-    if end == 0 {
-        None
-    } else {
-        Some(&input[..end])
-    }
+    if end == 0 { None } else { Some(&input[..end]) }
 }
 
 fn to_upper_snake(input: &str) -> String {

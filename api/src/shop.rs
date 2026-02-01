@@ -16,7 +16,7 @@ use crate::AppState;
     tag = "Shop",
     request_body = CreateDto,
     responses(
-        (status = 201, description = "Shop created successfully", body = ResponseDto),
+        (status = 204, description = "Shop created successfully"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -26,7 +26,7 @@ pub async fn create_shop(
     Json(dto): Json<CreateDto>,
 ) -> impl IntoResponse {
     match state.shop_usecase.create(&ctx, dto).await {
-        Ok(dto) => (StatusCode::CREATED, Json(dto)).into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }
 }
@@ -83,7 +83,7 @@ pub async fn get_shop(
         ("pub_id" = Uuid, Path, description = "Shop ID")
     ),
     responses(
-        (status = 200, description = "Shop updated successfully", body = ResponseDto),
+        (status = 204, description = "Shop updated successfully"),
         (status = 404, description = "Shop not found"),
         (status = 500, description = "Internal server error")
     )
@@ -95,7 +95,7 @@ pub async fn update_shop(
     Json(dto): Json<UpdateDto>,
 ) -> impl IntoResponse {
     match state.shop_usecase.update(&ctx, pub_id, dto).await {
-        Ok(shop) => (StatusCode::OK, Json(shop)).into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }
 }

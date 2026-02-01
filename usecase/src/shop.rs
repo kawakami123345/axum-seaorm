@@ -58,30 +58,26 @@ impl Service {
         Ok(shop.into())
     }
 
-    pub async fn create(
-        &self,
-        ctx: &UserContext,
-        dto: CreateDto,
-    ) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(&self, ctx: &UserContext, dto: CreateDto) -> Result<(), UseCaseError> {
         let name = shop::vo::ShopName::new(dto.name)?;
 
         let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
 
         cedar::authorize_shop_create(ctx, &shop)?;
 
-        let created = self.repo.create(shop).await.map_err(|e| {
+        self.repo.create(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
 
-        Ok(created.into())
+        Ok(())
     }
     pub async fn update(
         &self,
         ctx: &UserContext,
         pub_id: uuid::Uuid,
         dto: UpdateDto,
-    ) -> Result<ResponseDto, UseCaseError> {
+    ) -> Result<(), UseCaseError> {
         let mut shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -102,19 +98,15 @@ impl Service {
         shop.update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        let updated = self.repo.update(shop).await.map_err(|e| {
+        self.repo.update(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
 
-        Ok(updated.into())
+        Ok(())
     }
 
-    pub async fn delete(
-        &self,
-        ctx: &UserContext,
-        pub_id: uuid::Uuid,
-    ) -> Result<(), UseCaseError> {
+    pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
         let shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -207,11 +199,11 @@ mod tests {
                 .find(|s| s.pub_id() == pub_id)
                 .cloned())
         }
-        async fn create(&self, item: shop::Shop) -> anyhow::Result<shop::Shop> {
+        async fn create(&self, item: shop::Shop) -> anyhow::Result<()> {
             self.store.lock().unwrap().push(item.clone());
-            Ok(item)
+            Ok(())
         }
-        async fn update(&self, _item: shop::Shop) -> anyhow::Result<shop::Shop> {
+        async fn update(&self, _item: shop::Shop) -> anyhow::Result<()> {
             panic!("Not implemented")
         }
         async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
@@ -236,7 +228,11 @@ mod tests {
             name: "Test Shop".to_string(),
         };
 
-        let created = service.create(&ctx, dto).await.expect("Failed to create");
+        service.create(&ctx, dto).await.expect("Failed to create");
+
+        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        assert_eq!(all.len(), 1);
+        let created = all.remove(0);
         assert_eq!(created.name, "Test Shop");
 
         let fetched = service

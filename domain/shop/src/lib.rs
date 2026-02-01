@@ -9,8 +9,8 @@ pub mod vo;
 pub trait Repository: Sync + Send {
     async fn find_all(&self) -> anyhow::Result<Vec<Shop>>;
     async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<Shop>>;
-    async fn create(&self, item: Shop) -> anyhow::Result<Shop>;
-    async fn update(&self, item: Shop) -> anyhow::Result<Shop>;
+    async fn create(&self, item: Shop) -> anyhow::Result<()>;
+    async fn update(&self, item: Shop) -> anyhow::Result<()>;
     async fn delete(&self, item: Shop, deleted_by: Uuid) -> anyhow::Result<()>;
 }
 

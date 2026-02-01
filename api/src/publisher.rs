@@ -58,7 +58,7 @@ pub async fn get(
     operation_id = "create_publisher",
     request_body =  usecase::publisher::CreateDto,
     responses(
-        (status = 201, description = "Publisher created successfully", body = usecase::publisher::ResponseDto)
+        (status = 204, description = "Publisher created successfully")
     )
 )]
 pub async fn create(
@@ -67,7 +67,7 @@ pub async fn create(
     Json(payload): Json<usecase::publisher::CreateDto>,
 ) -> impl IntoResponse {
     match state.publisher_usecase.create(&ctx, payload).await {
-        Ok(publisher) => (StatusCode::CREATED, Json(publisher)).into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }
 }
@@ -79,7 +79,7 @@ pub async fn create(
     operation_id = "update_publisher",
     request_body = usecase::publisher::UpdateDto,
     responses(
-        (status = 200, description = "Publisher updated successfully", body = usecase::publisher::ResponseDto),
+        (status = 204, description = "Publisher updated successfully"),
         (status = 404, description = "Publisher not found")
     ),
     params(
@@ -93,7 +93,7 @@ pub async fn update(
     Json(payload): Json<usecase::publisher::UpdateDto>,
 ) -> impl IntoResponse {
     match state.publisher_usecase.update(&ctx, pub_id, payload).await {
-        Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }
 }

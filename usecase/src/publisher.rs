@@ -54,21 +54,17 @@ impl Service {
         Ok(publisher.into())
     }
 
-    pub async fn create(
-        &self,
-        ctx: &UserContext,
-        dto: CreateDto,
-    ) -> Result<ResponseDto, UseCaseError> {
+    pub async fn create(&self, ctx: &UserContext, dto: CreateDto) -> Result<(), UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
 
         cedar::authorize_publisher_create(ctx, &publisher)?;
 
-        let result = self.repo.create(publisher).await.map_err(|e| {
+        self.repo.create(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
-        Ok(result.into())
+        Ok(())
     }
 
     pub async fn update(
@@ -76,7 +72,7 @@ impl Service {
         ctx: &UserContext,
         pub_id: Uuid,
         dto: UpdateDto,
-    ) -> Result<ResponseDto, UseCaseError> {
+    ) -> Result<(), UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let mut publisher = self
             .repo
@@ -97,11 +93,11 @@ impl Service {
             .update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        let result = self.repo.update(publisher).await.map_err(|e| {
+        self.repo.update(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
-        Ok(result.into())
+        Ok(())
     }
 
     pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
@@ -193,7 +189,7 @@ mod tests {
             Ok(store.iter().find(|p| p.pub_id() == pub_id).cloned())
         }
 
-        async fn create(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+        async fn create(&self, item: publisher::Publisher) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
             let new_id = store.iter().map(|p| p.id()).max().unwrap_or(0) + 1;
 
@@ -207,15 +203,15 @@ mod tests {
                 *item.updated_by(),
             );
 
-            store.push(new_publisher.clone());
-            Ok(new_publisher)
+            store.push(new_publisher);
+            Ok(())
         }
 
-        async fn update(&self, item: publisher::Publisher) -> anyhow::Result<publisher::Publisher> {
+        async fn update(&self, item: publisher::Publisher) -> anyhow::Result<()> {
             let mut store = self.store.lock().unwrap();
             if let Some(index) = store.iter().position(|p| p.id() == item.id()) {
-                store[index] = item.clone();
-                Ok(item)
+                store[index] = item;
+                Ok(())
             } else {
                 Err(anyhow::anyhow!("Publisher not found"))
             }
@@ -250,7 +246,11 @@ mod tests {
             name: "Test Publisher".to_string(),
         };
 
-        let created = service.create(&ctx, dto).await.expect("Failed to create");
+        service.create(&ctx, dto).await.expect("Failed to create");
+
+        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        assert_eq!(all.len(), 1);
+        let created = all.remove(0);
         assert_eq!(created.name, "Test Publisher");
 
         let fetched = service
@@ -300,17 +300,20 @@ mod tests {
         let dto = CreateDto {
             name: "Original Name".to_string(),
         };
-        let created = service.create(&ctx, dto).await.expect("Failed to create");
+        service.create(&ctx, dto).await.expect("Failed to create");
+
+        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        assert_eq!(all.len(), 1);
+        let created = all.remove(0);
 
         let update_dto = UpdateDto {
             name: "Updated Name".to_string(),
         };
 
-        let updated = service
+        service
             .update(&ctx, created.pub_id, update_dto)
             .await
             .expect("Failed to update");
-        assert_eq!(updated.name, "Updated Name");
 
         let fetched = service
             .get(&ctx, created.pub_id)
@@ -330,7 +333,11 @@ mod tests {
         let dto = CreateDto {
             name: "To Delete".to_string(),
         };
-        let created = service.create(&ctx, dto).await.expect("Failed to create");
+        service.create(&ctx, dto).await.expect("Failed to create");
+
+        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        assert_eq!(all.len(), 1);
+        let created = all.remove(0);
 
         service
             .delete(&ctx, created.pub_id)
