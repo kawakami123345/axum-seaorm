@@ -11,6 +11,7 @@ members = [
     "usecase",
     "api",
     "domain/shop",
+    "cedar_schema_macros",
 ]
 resolver = "2"
 
@@ -90,3 +91,4 @@ time = "0.3"
 itertools = "0.14"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 cedar-policy = { version = "4.8.2", features = ["partial-eval", "tpe"] }
+cedar_schema_macros = { path = "cedar_schema_macros" }

@@ -709,6 +709,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cedar_schema_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4827,6 +4836,7 @@ dependencies = [
  "async-trait",
  "book",
  "cedar-policy",
+ "cedar_schema_macros",
  "chrono",
  "itertools 0.14.0",
  "publisher",

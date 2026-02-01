@@ -17,6 +17,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 itertools = { workspace = true }
 cedar-policy = { workspace = true }
+cedar_schema_macros = { workspace = true }
 
 
 [dev-dependencies]

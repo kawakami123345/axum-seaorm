@@ -3,6 +3,7 @@ use cedar_policy::{
     Authorizer, Context, Decision, Entities, Entity, EntityId, EntityTypeName, EntityUid,
     PolicySet, Request, RestrictedExpression, Schema, TestEntityLoader,
 };
+use cedar_schema_macros::cedar_schema_consts;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -11,32 +12,7 @@ use std::{
     sync::LazyLock,
 };
 
-const ENTITY_TYPE_USER: &str = "User";
-const ENTITY_TYPE_BOOK: &str = "Book";
-const ENTITY_TYPE_PUBLISHER: &str = "Publisher";
-const ENTITY_TYPE_SHOP: &str = "Shop";
-const ENTITY_TYPE_DASHBOARD: &str = "Dashboard";
-
-const ACTION_LIST_BOOKS: &str = "ListBooks";
-const ACTION_GET_BOOK: &str = "GetBook";
-const ACTION_CREATE_BOOK: &str = "CreateBook";
-const ACTION_UPDATE_BOOK: &str = "UpdateBook";
-const ACTION_DELETE_BOOK: &str = "DeleteBook";
-const ACTION_CHANGE_BOOK_APPLIED_AT: &str = "ChangeBookAppliedAt";
-
-const ACTION_LIST_PUBLISHERS: &str = "ListPublishers";
-const ACTION_GET_PUBLISHER: &str = "GetPublisher";
-const ACTION_CREATE_PUBLISHER: &str = "CreatePublisher";
-const ACTION_UPDATE_PUBLISHER: &str = "UpdatePublisher";
-const ACTION_DELETE_PUBLISHER: &str = "DeletePublisher";
-
-const ACTION_LIST_SHOPS: &str = "ListShops";
-const ACTION_GET_SHOP: &str = "GetShop";
-const ACTION_CREATE_SHOP: &str = "CreateShop";
-const ACTION_UPDATE_SHOP: &str = "UpdateShop";
-const ACTION_DELETE_SHOP: &str = "DeleteShop";
-
-const ACTION_GET_ANNUAL_SUMMARY: &str = "GetAnnualSummary";
+cedar_schema_consts!("policies/schema.cedarschema");
 
 const POLICY_FILE: &str = "policies/book.cedar";
 const SCHEMA_FILE: &str = "policies/schema.cedarschema";
