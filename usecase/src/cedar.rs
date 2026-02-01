@@ -12,6 +12,7 @@ use std::{
     sync::LazyLock,
 };
 
+// 黒魔術: cedarschemaからconst作成
 cedar_schema_consts!("policies/schema.cedarschema");
 
 const POLICY_FILE: &str = "policies/book.cedar";
