@@ -7,13 +7,9 @@ entity Book {
   user_id: String
 };
 
-entity Publisher {
-  created_by: String
-};
+entity Publisher;
 
-entity Shop {
-  created_by: String
-};
+entity Shop;
 
 entity Dashboard;
 

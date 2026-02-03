@@ -238,7 +238,7 @@ fn authorize_publishers_batch(
     let mut allowed = Vec::new();
     for publisher in publishers {
         let resource_uid = publisher_uid(&publisher.pub_id())?;
-        let resource = publisher_entity(&publisher.pub_id(), publisher.created_by())?;
+        let resource = publisher_entity(&publisher.pub_id())?;
         let entities = Entities::from_entities([principal.clone(), resource], Some(schema))
             .map_err(|e| cedar_error("failed to build cedar entities", e))?;
         let request = Request::new(
@@ -275,7 +275,7 @@ fn authorize_shops_batch(
     let mut allowed = Vec::new();
     for shop in shops {
         let resource_uid = shop_uid(&shop.pub_id())?;
-        let resource = shop_entity(&shop.pub_id(), shop.created_by())?;
+        let resource = shop_entity(&shop.pub_id())?;
         let entities = Entities::from_entities([principal.clone(), resource], Some(schema))
             .map_err(|e| cedar_error("failed to build cedar entities", e))?;
         let request = Request::new(
@@ -313,7 +313,7 @@ fn authorize_publisher_action(
     publisher: &publisher::Publisher,
 ) -> Result<(), UseCaseError> {
     let resource_uid = publisher_uid(&publisher.pub_id())?;
-    let resource = publisher_entity(&publisher.pub_id(), publisher.created_by())?;
+    let resource = publisher_entity(&publisher.pub_id())?;
     authorize_action_with_resource(ctx, action, resource_uid, resource)
 }
 
@@ -323,7 +323,7 @@ fn authorize_shop_action(
     shop: &shop::Shop,
 ) -> Result<(), UseCaseError> {
     let resource_uid = shop_uid(&shop.pub_id())?;
-    let resource = shop_entity(&shop.pub_id(), shop.created_by())?;
+    let resource = shop_entity(&shop.pub_id())?;
     authorize_action_with_resource(ctx, action, resource_uid, resource)
 }
 
@@ -443,26 +443,15 @@ fn book_entity(book_id: &uuid::Uuid, user_id: &uuid::Uuid) -> Result<Entity, Use
         .map_err(|e| cedar_error("failed to build resource entity", e))
 }
 
-fn publisher_entity(
-    publisher_id: &uuid::Uuid,
-    created_by: &uuid::Uuid,
-) -> Result<Entity, UseCaseError> {
+fn publisher_entity(publisher_id: &uuid::Uuid) -> Result<Entity, UseCaseError> {
     let uid = publisher_uid(publisher_id)?;
-    let attrs = HashMap::from([(
-        "created_by".to_string(),
-        string_expr(&created_by.to_string())?,
-    )]);
-    Entity::new(uid, attrs, HashSet::new())
+    Entity::new(uid, HashMap::new(), HashSet::new())
         .map_err(|e| cedar_error("failed to build resource entity", e))
 }
 
-fn shop_entity(shop_id: &uuid::Uuid, created_by: &uuid::Uuid) -> Result<Entity, UseCaseError> {
+fn shop_entity(shop_id: &uuid::Uuid) -> Result<Entity, UseCaseError> {
     let uid = shop_uid(shop_id)?;
-    let attrs = HashMap::from([(
-        "created_by".to_string(),
-        string_expr(&created_by.to_string())?,
-    )]);
-    Entity::new(uid, attrs, HashSet::new())
+    Entity::new(uid, HashMap::new(), HashSet::new())
         .map_err(|e| cedar_error("failed to build resource entity", e))
 }
 
