@@ -11,6 +11,7 @@ impl IntoResponse for AppError {
         let (status, message) = match self.0 {
             UseCaseError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             UseCaseError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            UseCaseError::AuthorizationError(e) => (StatusCode::FORBIDDEN, e),
             UseCaseError::InternalServerError | UseCaseError::DatabaseError => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Server Error".to_string(),
