@@ -6,6 +6,8 @@ pub enum UseCaseError {
     NotFound(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Authorization error: {0}")]
+    AuthorizationError(String),
     #[error("Internal server error")]
     InternalServerError,
     #[error("Database execution failed")]
