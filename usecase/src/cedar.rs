@@ -90,18 +90,27 @@ fn authorize_books_batch(
     policies: &PolicySet,
     books: &[book::Book],
 ) -> Result<Vec<book::Book>, UseCaseError> {
+    if books.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let principal_uid = entity_uid(ENTITY_TYPE_USER, &ctx.user_id().to_string())?;
     let action_uid = entity_uid("Action", action)?;
     let principal = user_entity(ctx.user_id(), ctx.is_admin())?;
 
+    let mut entity_list = Vec::with_capacity(books.len() + 1);
+    entity_list.push(principal);
+    for book in books {
+        entity_list.push(book_entity(&book.pub_id(), book.user_id())?);
+    }
+
+    let entities = Entities::from_entities(entity_list, Some(&SCHEMA)).map_err(|e| {
+        UseCaseError::AuthorizationError(format!("failed to build cedar entities: {e}"))
+    })?;
+
     let mut allowed = Vec::new();
     for book in books {
         let resource_uid = entity_uid(ENTITY_TYPE_BOOK, &book.pub_id().to_string())?;
-        let resource = book_entity(&book.pub_id(), book.user_id())?;
-        let entities = Entities::from_entities([principal.clone(), resource], Some(&SCHEMA))
-            .map_err(|e| {
-                UseCaseError::AuthorizationError(format!("failed to build cedar entities: {e}"))
-            })?;
         let request = Request::new(
             principal_uid.clone(),
             action_uid.clone(),
@@ -338,6 +347,7 @@ fn dashboard_entity() -> Result<Entity, UseCaseError> {
     })
 }
 
+
 fn string_expr(value: &str) -> Result<RestrictedExpression, UseCaseError> {
     RestrictedExpression::from_str(&format!("\"{}\"", value)).map_err(|e| {
         UseCaseError::AuthorizationError(format!("failed to build cedar string expression: {e}"))
@@ -370,10 +380,10 @@ pub fn partial_authorize_book_list(ctx: &UserContext) -> Result<PartialDecision,
 
 pub fn authorize_book_list_batch(
     ctx: &UserContext,
+    residual_policies: &PolicySet,
     books: &[book::Book],
 ) -> Result<Vec<book::Book>, UseCaseError> {
-    let policies = &*POLICY_SET;
-    authorize_books_batch(ctx, ACTION_LIST_BOOKS, policies, books)
+    authorize_books_batch(ctx, ACTION_LIST_BOOKS, residual_policies, books)
 }
 
 pub fn authorize_book_get(ctx: &UserContext, book: &book::Book) -> Result<(), UseCaseError> {

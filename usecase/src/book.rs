@@ -1,4 +1,8 @@
-use crate::{UserContext, cedar, error::UseCaseError};
+use crate::{
+    UserContext,
+    cedar::{self, partial_authorize_book_list},
+    error::UseCaseError,
+};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -24,12 +28,23 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = partial_authorize_book_list(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let books = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
         })?;
 
-        let books = cedar::authorize_book_list_batch(ctx, &books)?;
+        let books = match partial {
+            cedar::PartialDecision::Allow => books,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_book_list_batch(ctx, &residuals, &books)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
 
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
         Ok(response_dtos)
@@ -40,6 +55,11 @@ impl Service {
         ctx: &UserContext,
         year: i32,
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let partial = partial_authorize_book_list(ctx)?;
+        if matches!(partial, cedar::PartialDecision::Deny) {
+            return Ok(Vec::new());
+        }
+
         let books = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
             UseCaseError::DatabaseError
@@ -50,7 +70,13 @@ impl Service {
             .filter(|b| b.applied_at().is_some_and(|at| at.year() == year))
             .collect();
 
-        let books = cedar::authorize_book_list_batch(ctx, &books)?;
+        let books = match partial {
+            cedar::PartialDecision::Allow => books,
+            cedar::PartialDecision::Residual(residuals) => {
+                cedar::authorize_book_list_batch(ctx, &residuals, &books)?
+            }
+            cedar::PartialDecision::Deny => Vec::new(),
+        };
 
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
 
