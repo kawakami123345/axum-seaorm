@@ -53,7 +53,7 @@ fn partial_authorize(
     let authorizer = Authorizer::new();
     let principal_uid = entity_uid(ENTITY_TYPE_USER, &ctx.user_id().to_string())?;
     let principal = user_entity(ctx.user_id(), ctx.is_admin())?;
-    let entities = Entities::from_entities([principal], None).map_err(|e| {
+    let entities = Entities::from_entities([principal], Some(&SCHEMA)).map_err(|e| {
         UseCaseError::AuthorizationError(format!("failed to build cedar entities: {e}"))
     })?;
 
@@ -87,30 +87,22 @@ fn partial_authorize(
 fn authorize_books_batch(
     ctx: &UserContext,
     action: &str,
-    policies: &PolicySet,
+    residual_policies: &PolicySet,
     books: &[book::Book],
 ) -> Result<Vec<book::Book>, UseCaseError> {
-    if books.is_empty() {
-        return Ok(Vec::new());
-    }
-
+    let authorizer = Authorizer::new();
     let principal_uid = entity_uid(ENTITY_TYPE_USER, &ctx.user_id().to_string())?;
     let action_uid = entity_uid("Action", action)?;
     let principal = user_entity(ctx.user_id(), ctx.is_admin())?;
 
-    let mut entity_list = Vec::with_capacity(books.len() + 1);
-    entity_list.push(principal);
-    for book in books {
-        entity_list.push(book_entity(&book.pub_id(), book.user_id())?);
-    }
-
-    let entities = Entities::from_entities(entity_list, Some(&SCHEMA)).map_err(|e| {
-        UseCaseError::AuthorizationError(format!("failed to build cedar entities: {e}"))
-    })?;
-
     let mut allowed = Vec::new();
     for book in books {
         let resource_uid = entity_uid(ENTITY_TYPE_BOOK, &book.pub_id().to_string())?;
+        let resource = book_entity(&book.pub_id(), book.user_id())?;
+        let entities = Entities::from_entities([principal.clone(), resource], Some(&SCHEMA))
+            .map_err(|e| {
+                UseCaseError::AuthorizationError(format!("failed to build cedar entities: {e}"))
+            })?;
         let request = Request::new(
             principal_uid.clone(),
             action_uid.clone(),
@@ -121,12 +113,9 @@ fn authorize_books_batch(
         .map_err(|e| {
             UseCaseError::AuthorizationError(format!("failed to build cedar request: {e}"))
         })?;
-        let mut loader = TestEntityLoader::new(&entities);
-        let decision = policies
-            .is_authorized_batched(&request, &SCHEMA, &mut loader, u32::MAX)
-            .map_err(|e| {
-                UseCaseError::AuthorizationError(format!("cedar batch evaluation failed: {e}"))
-            })?;
+        let decision = authorizer
+            .is_authorized(&request, residual_policies, &entities)
+            .decision();
         if decision == Decision::Allow {
             allowed.push(book.clone());
         }
@@ -347,7 +336,6 @@ fn dashboard_entity() -> Result<Entity, UseCaseError> {
     })
 }
 
-
 fn string_expr(value: &str) -> Result<RestrictedExpression, UseCaseError> {
     RestrictedExpression::from_str(&format!("\"{}\"", value)).map_err(|e| {
         UseCaseError::AuthorizationError(format!("failed to build cedar string expression: {e}"))
@@ -376,6 +364,13 @@ fn entity_type_name(name: &str) -> Result<EntityTypeName, UseCaseError> {
 
 pub fn partial_authorize_book_list(ctx: &UserContext) -> Result<PartialDecision, UseCaseError> {
     partial_authorize(ctx, ACTION_LIST_BOOKS, ENTITY_TYPE_BOOK)
+}
+
+pub fn authorize_book_list(
+    ctx: &UserContext,
+    books: &[book::Book],
+) -> Result<Vec<book::Book>, UseCaseError> {
+    authorize_books_batch(ctx, ACTION_LIST_BOOKS, &POLICY_SET, books)
 }
 
 pub fn authorize_book_list_batch(
