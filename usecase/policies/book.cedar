@@ -6,7 +6,8 @@ permit(
     Action::"CreateBook",
     Action::"UpdateBook",
     Action::"DeleteBook",
-    Action::"ChangeBookAppliedAt"
+    Action::"ChangeBookAppliedAt",
+    Action::"GetAnnualSummary"
   ],
   resource
 ) when {
@@ -37,8 +38,3 @@ permit(
   resource
 );
 
-permit(
-  principal,
-  action == Action::"GetAnnualSummary",
-  resource
-);

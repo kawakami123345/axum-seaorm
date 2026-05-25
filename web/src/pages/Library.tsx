@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { useGetAllBooks, useCreateBook, useUpdateBook, useChangeBookAppliedAt, type getAllBooksResponse } from '../api/endpoints/book/book';
+import { useQueryClient } from '@tanstack/react-query';
+import { getGetAllBooksQueryKey, useGetAllBooks, useCreateBook, useUpdateBook, useChangeBookAppliedAt, type getAllBooksResponse } from '../api/endpoints/book/book';
+import { getGetAnnualSummaryQueryKey } from '../api/endpoints/dashboard/dashboard';
 import BudgetSummary from '../components/BudgetSummary';
 import BookModal from '../components/BookModal';
 import type { BookResponseDto, BookCreateDto, BookUpdateDto } from '../api/model';
 
 const Library = () => {
+    const queryClient = useQueryClient();
     const { data: booksData, isLoading, error } = useGetAllBooks<getAllBooksResponse, Error>();
     // The response object contains the data array
     const books = booksData?.data || [];
@@ -32,12 +35,20 @@ const Library = () => {
         setSelectedBook(undefined);
     };
 
+    const invalidateBookViews = () => {
+        queryClient.invalidateQueries({ queryKey: getGetAllBooksQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetAnnualSummaryQueryKey() });
+    };
+
     const handleModalSubmit = (data: BookCreateDto | BookUpdateDto) => {
         if (selectedBook) {
             updateMutation.mutate(
                 { pubId: selectedBook.pub_id, data: data as BookUpdateDto },
                 {
-                    onSuccess: () => handleModalClose(),
+                    onSuccess: () => {
+                        invalidateBookViews();
+                        handleModalClose();
+                    },
                     onError: (err: Error) => {
                         console.error('Update failed:', err);
                         alert('更新に失敗しました: ' + err.message);
@@ -47,7 +58,10 @@ const Library = () => {
         } else {
             // Orval with tags-split usually expects { data: body } for mutation arguments if configured that way
             createMutation.mutate({ data: data as BookCreateDto }, {
-                onSuccess: () => handleModalClose(),
+                onSuccess: () => {
+                    invalidateBookViews();
+                    handleModalClose();
+                },
                 onError: (err: Error) => {
                     console.error('Create failed:', err);
                     alert('登録に失敗しました: ' + err.message);
@@ -77,7 +91,7 @@ const Library = () => {
             },
             {
                 onSuccess: () => {
-                    window.location.reload();
+                    invalidateBookViews();
                 },
                 onError: (err: Error) => {
                     console.error('Apply failed:', err);

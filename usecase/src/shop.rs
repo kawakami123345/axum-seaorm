@@ -14,25 +14,24 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let partial = cedar::partial_authorize_shop_list(ctx)?;
-        if matches!(partial, cedar::PartialDecision::Deny) {
-            return Ok(Vec::new());
-        }
-
-        let shops = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-        let shops = match partial {
-            cedar::PartialDecision::Allow => shops,
-            cedar::PartialDecision::Residual(residuals) => {
-                cedar::authorize_shop_list_batch(ctx, &residuals, &shops)?
-            }
-            cedar::PartialDecision::Deny => Vec::new(),
+        let shops = match cedar::authorize_list_query(
+            ctx,
+            cedar::ACTION_LIST_SHOPS,
+            cedar::ENTITY_TYPE_SHOP,
+        )? {
+            cedar::PolicyEvaluation::Allow => self.find_all().await?,
+            cedar::PolicyEvaluation::Deny => Vec::new(),
         };
 
         let dtos = shops.into_iter().map(ResponseDto::from).collect();
         Ok(dtos)
+    }
+
+    async fn find_all(&self) -> Result<Vec<shop::Shop>, UseCaseError> {
+        self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in list shops: {:?}", e);
+            UseCaseError::DatabaseError
+        })
     }
 
     pub async fn get(
@@ -53,7 +52,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_shop_get(ctx, &shop)?;
+        cedar::authorize_shop_action(ctx, cedar::ACTION_GET_SHOP, &shop)?;
 
         Ok(shop.into())
     }
@@ -63,7 +62,7 @@ impl Service {
 
         let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
 
-        cedar::authorize_shop_create(ctx, &shop)?;
+        cedar::authorize_shop_action(ctx, cedar::ACTION_CREATE_SHOP, &shop)?;
 
         self.repo.create(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -91,7 +90,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_shop_update(ctx, &shop)?;
+        cedar::authorize_shop_action(ctx, cedar::ACTION_UPDATE_SHOP, &shop)?;
 
         let name = shop::vo::ShopName::new(dto.name)?;
 
@@ -120,7 +119,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_shop_delete(ctx, &shop)?;
+        cedar::authorize_shop_action(ctx, cedar::ACTION_DELETE_SHOP, &shop)?;
 
         self.repo
             .delete(

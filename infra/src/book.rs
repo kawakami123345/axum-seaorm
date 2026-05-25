@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::StringLen;
+use sea_orm::sea_query::{Condition, Expr, ExprTrait, IntoCondition, StringLen};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::BeginWithUser;
@@ -116,6 +116,45 @@ impl SqlRepository {
     }
 }
 
+struct BookSeaOrmFilter(book::ListFilter);
+
+impl From<BookSeaOrmFilter> for Condition {
+    fn from(filter: BookSeaOrmFilter) -> Self {
+        book_filter_condition(filter.0)
+    }
+}
+
+fn book_filter_condition(filter: book::ListFilter) -> Condition {
+    match filter {
+        book::ListFilter::All => Condition::all(),
+        book::ListFilter::None => false_condition(),
+        book::ListFilter::Eq(
+            book::ListFilterField::UserId,
+            book::ListFilterValue::Uuid(user_id),
+        ) => Column::UserId.eq(user_id).into_condition(),
+        book::ListFilter::And(left, right) => match book::ListFilter::and(*left, *right) {
+            book::ListFilter::And(left, right) => Condition::all()
+                .add(book_filter_condition(*left))
+                .add(book_filter_condition(*right)),
+            filter => book_filter_condition(filter),
+        },
+        book::ListFilter::Or(left, right) => match book::ListFilter::or(*left, *right) {
+            book::ListFilter::Or(left, right) => Condition::any()
+                .add(book_filter_condition(*left))
+                .add(book_filter_condition(*right)),
+            filter => book_filter_condition(filter),
+        },
+        book::ListFilter::Not(filter) => match book::ListFilter::negate(*filter) {
+            book::ListFilter::Not(filter) => book_filter_condition(*filter).not(),
+            filter => book_filter_condition(filter),
+        },
+    }
+}
+
+fn false_condition() -> Condition {
+    Expr::val(1).eq(0).into_condition()
+}
+
 #[async_trait]
 impl book::Repository for SqlRepository {
     async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
@@ -123,6 +162,29 @@ impl book::Repository for SqlRepository {
             .order_by(Column::Id, sea_orm::Order::Desc)
             .with(super::publisher::Entity)
             .with(super::shop::Entity)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| m.to_domain())
+            .collect::<anyhow::Result<Vec<book::Book>>>()
+    }
+
+    async fn find_all_by_filter(
+        &self,
+        filter: book::ListFilter,
+    ) -> anyhow::Result<Vec<book::Book>> {
+        if matches!(filter, book::ListFilter::None) {
+            return Ok(Vec::new());
+        }
+
+        let query = Entity::load()
+            .order_by(Column::Id, sea_orm::Order::Desc)
+            .with(super::publisher::Entity)
+            .with(super::shop::Entity);
+
+        let query = query.filter(BookSeaOrmFilter(filter));
+
+        query
             .all(&self.db)
             .await?
             .into_iter()
@@ -195,5 +257,44 @@ impl book::Repository for SqlRepository {
         Entity::delete_by_id(item.id()).exec(&txn).await?;
         txn.commit().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::{DbBackend, QueryTrait};
+    use uuid::Uuid;
+
+    #[test]
+    fn owned_by_filter_builds_user_id_condition() {
+        let user_id = Uuid::from_u128(1);
+
+        let sql = Entity::find()
+            .filter(BookSeaOrmFilter(book::ListFilter::owned_by(user_id)))
+            .build(DbBackend::Postgres)
+            .to_string();
+
+        assert!(sql.contains("\"user_id\""));
+        assert!(sql.contains(&user_id.to_string()));
+    }
+
+    #[test]
+    fn or_filter_builds_disjunction() {
+        let first_user_id = Uuid::from_u128(1);
+        let second_user_id = Uuid::from_u128(2);
+
+        let filter = book::ListFilter::or(
+            book::ListFilter::owned_by(first_user_id),
+            book::ListFilter::owned_by(second_user_id),
+        );
+        let sql = Entity::find()
+            .filter(BookSeaOrmFilter(filter))
+            .build(DbBackend::Postgres)
+            .to_string();
+
+        assert!(sql.contains(" OR "));
+        assert!(sql.contains(&first_user_id.to_string()));
+        assert!(sql.contains(&second_user_id.to_string()));
     }
 }

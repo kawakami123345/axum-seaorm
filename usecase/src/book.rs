@@ -24,12 +24,7 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let books = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        let books = cedar::authorize_book_list(ctx, &books)?;
+        let books = self.find_authorized_books(ctx).await?;
 
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
         Ok(response_dtos)
@@ -40,21 +35,39 @@ impl Service {
         ctx: &UserContext,
         year: i32,
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let books = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        let books = self.find_authorized_books(ctx).await?;
 
         let books: Vec<book::Book> = books
             .into_iter()
             .filter(|b| b.applied_at().is_some_and(|at| at.year() == year))
             .collect();
 
-        let books = cedar::authorize_book_list(ctx, &books)?;
-
         let response_dtos = books.into_iter().map(ResponseDto::from).collect();
 
         Ok(response_dtos)
+    }
+
+    async fn find_authorized_books(
+        &self,
+        ctx: &UserContext,
+    ) -> Result<Vec<book::Book>, UseCaseError> {
+        match cedar::authorize_book_query(ctx, cedar::ACTION_LIST_BOOKS)? {
+            cedar::PolicyEvaluation::Allow => self
+                .repo
+                .find_all_by_filter(book::ListFilter::All)
+                .await
+                .map_err(|e| {
+                    eprintln!("Database error in list books: {:?}", e);
+                    UseCaseError::DatabaseError
+                }),
+            cedar::PolicyEvaluation::Deny => Ok(Vec::new()),
+            cedar::PolicyEvaluation::Filter(filter) => {
+                self.repo.find_all_by_filter(filter).await.map_err(|e| {
+                    eprintln!("Database error in list books: {:?}", e);
+                    UseCaseError::DatabaseError
+                })
+            }
+        }
     }
 
     pub async fn get(
@@ -72,7 +85,7 @@ impl Service {
             })?
             .ok_or(UseCaseError::NotFound("Book not found".into()))?;
 
-        cedar::authorize_book_get(ctx, &book).map_err(|e| match e {
+        cedar::authorize_book_action(ctx, cedar::ACTION_GET_BOOK, &book).map_err(|e| match e {
             UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
             _ => e,
         })?;
@@ -127,7 +140,7 @@ impl Service {
             ctx.user_id,
         );
 
-        cedar::authorize_book_create(ctx, &book)?;
+        cedar::authorize_book_action(ctx, cedar::ACTION_CREATE_BOOK, &book)?;
 
         self.repo.create(book).await.map_err(|e| {
             eprintln!("Database error in create book: {:?}", e);
@@ -161,10 +174,12 @@ impl Service {
             })?
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        cedar::authorize_book_update(ctx, &book).map_err(|e| match e {
-            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-            _ => e,
-        })?;
+        cedar::authorize_book_action(ctx, cedar::ACTION_UPDATE_BOOK, &book).map_err(
+            |e| match e {
+                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+                _ => e,
+            },
+        )?;
 
         // Resolve Publisher
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
@@ -222,10 +237,12 @@ impl Service {
             })?
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        cedar::authorize_book_delete(ctx, &book).map_err(|e| match e {
-            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-            _ => e,
-        })?;
+        cedar::authorize_book_action(ctx, cedar::ACTION_DELETE_BOOK, &book).map_err(
+            |e| match e {
+                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+                _ => e,
+            },
+        )?;
 
         self.repo.delete(book, ctx.user_id).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -249,10 +266,12 @@ impl Service {
             })?
             .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
 
-        cedar::authorize_book_change_applied_at(ctx, &book).map_err(|e| match e {
-            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-            _ => e,
-        })?;
+        cedar::authorize_book_action(ctx, cedar::ACTION_CHANGE_BOOK_APPLIED_AT, &book).map_err(
+            |e| match e {
+                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
+                _ => e,
+            },
+        )?;
 
         book.change_applied_at(dto.applied_at, ctx.user_id)
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
@@ -623,6 +642,65 @@ mod tests {
 
         let all = service.get_all(&ctx).await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_get_all_filters_by_cedar_pst_authorization(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, pub_repo, _) = service.await;
+        let publisher_id = uuid::Uuid::new_v4();
+        pub_repo.add(create_dummy_publisher(publisher_id));
+
+        let user_id = Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap();
+        let other_user_id = Uuid::from_str("22222222-1234-5678-90ab-cdef12345678").unwrap();
+        let user_ctx = UserContext::new(user_id, vec![]);
+        let other_user_ctx = UserContext::new(other_user_id, vec![]);
+
+        service
+            .create(
+                &user_ctx,
+                CreateDto {
+                    title: "User Book".to_string(),
+                    author: "Author 1".to_string(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 100,
+                },
+            )
+            .await
+            .expect("Failed to create user book");
+        service
+            .create(
+                &other_user_ctx,
+                CreateDto {
+                    title: "Other User Book".to_string(),
+                    author: "Author 2".to_string(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 200,
+                },
+            )
+            .await
+            .expect("Failed to create other user book");
+
+        let user_books = service.get_all(&user_ctx).await.expect("Failed to get all");
+        assert_eq!(user_books.len(), 1);
+        assert_eq!(user_books[0].title, "User Book");
+
+        let admin_ctx = UserContext::new(user_id, vec!["admin".to_string()]);
+        let admin_books = service
+            .get_all(&admin_ctx)
+            .await
+            .expect("Failed to get all as admin");
+        assert_eq!(admin_books.len(), 2);
     }
 
     #[rstest]

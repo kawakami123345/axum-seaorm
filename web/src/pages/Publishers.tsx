@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { useGetAllPublishers, useCreatePublisher, useUpdatePublisher, type getAllPublishersResponse } from '../api/endpoints/publisher/publisher';
+import { useQueryClient } from '@tanstack/react-query';
+import { getGetAllPublishersQueryKey, useGetAllPublishers, useCreatePublisher, useUpdatePublisher, type getAllPublishersResponse } from '../api/endpoints/publisher/publisher';
+import { getGetAllBooksQueryKey } from '../api/endpoints/book/book';
 import BudgetSummary from '../components/BudgetSummary';
 import PublisherModal from '../components/PublisherModal';
 import type { PublisherResponseDto, PublisherCreateDto, PublisherUpdateDto } from '../api/model';
 
 const Publishers = () => {
+    const queryClient = useQueryClient();
     const { data: publishersData, isLoading, error } = useGetAllPublishers<getAllPublishersResponse, Error>();
     const publishers = publishersData?.data || [];
 
@@ -34,12 +37,19 @@ const Publishers = () => {
             updateMutation.mutate(
                 { pubId: selectedPublisher.pub_id, data: data as PublisherUpdateDto },
                 {
-                    onSuccess: () => handleModalClose(),
+                    onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey: getGetAllPublishersQueryKey() });
+                        queryClient.invalidateQueries({ queryKey: getGetAllBooksQueryKey() });
+                        handleModalClose();
+                    },
                 }
             );
         } else {
             createMutation.mutate({ data: data as PublisherCreateDto }, {
-                onSuccess: () => handleModalClose(),
+                onSuccess: () => {
+                    queryClient.invalidateQueries({ queryKey: getGetAllPublishersQueryKey() });
+                    handleModalClose();
+                },
             });
         }
     };

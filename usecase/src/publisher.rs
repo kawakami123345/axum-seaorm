@@ -14,25 +14,23 @@ impl Service {
     }
 
     pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let partial = cedar::partial_authorize_publisher_list(ctx)?;
-        if matches!(partial, cedar::PartialDecision::Deny) {
-            return Ok(Vec::new());
-        }
-
-        let publishers = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        let publishers = match partial {
-            cedar::PartialDecision::Allow => publishers,
-            cedar::PartialDecision::Residual(residuals) => {
-                cedar::authorize_publisher_list_batch(ctx, &residuals, &publishers)?
-            }
-            cedar::PartialDecision::Deny => Vec::new(),
+        let publishers = match cedar::authorize_list_query(
+            ctx,
+            cedar::ACTION_LIST_PUBLISHERS,
+            cedar::ENTITY_TYPE_PUBLISHER,
+        )? {
+            cedar::PolicyEvaluation::Allow => self.find_all().await?,
+            cedar::PolicyEvaluation::Deny => Vec::new(),
         };
 
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
+    }
+
+    async fn find_all(&self) -> Result<Vec<publisher::Publisher>, UseCaseError> {
+        self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in list publishers: {:?}", e);
+            UseCaseError::DatabaseError
+        })
     }
 
     pub async fn get(&self, ctx: &UserContext, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
@@ -49,7 +47,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_publisher_get(ctx, &publisher)?;
+        cedar::authorize_publisher_action(ctx, cedar::ACTION_GET_PUBLISHER, &publisher)?;
 
         Ok(publisher.into())
     }
@@ -58,7 +56,7 @@ impl Service {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
 
-        cedar::authorize_publisher_create(ctx, &publisher)?;
+        cedar::authorize_publisher_action(ctx, cedar::ACTION_CREATE_PUBLISHER, &publisher)?;
 
         self.repo.create(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -87,7 +85,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_publisher_update(ctx, &publisher)?;
+        cedar::authorize_publisher_action(ctx, cedar::ACTION_UPDATE_PUBLISHER, &publisher)?;
 
         publisher
             .update(name, *ctx.user_id())
@@ -114,7 +112,7 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_publisher_delete(ctx, &publisher)?;
+        cedar::authorize_publisher_action(ctx, cedar::ACTION_DELETE_PUBLISHER, &publisher)?;
 
         self.repo
             .delete(publisher, *ctx.user_id())

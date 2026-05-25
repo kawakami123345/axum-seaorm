@@ -38,13 +38,13 @@ fn build_consts(path_literal: &LitStr) -> Result<TokenStream, TokenStream> {
     let entity_consts = entities.iter().map(|name| {
         let const_name = format!("ENTITY_TYPE_{}", to_upper_snake(name));
         let ident = syn::Ident::new(&const_name, path_literal.span());
-        quote! { const #ident: &str = #name; }
+        quote! { pub const #ident: &str = #name; }
     });
 
     let action_consts = actions.iter().map(|name| {
         let const_name = format!("ACTION_{}", to_upper_snake(name));
         let ident = syn::Ident::new(&const_name, path_literal.span());
-        quote! { const #ident: &str = #name; }
+        quote! { pub const #ident: &str = #name; }
     });
 
     Ok(quote! {

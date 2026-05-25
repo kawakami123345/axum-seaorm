@@ -8,10 +8,83 @@ pub mod vo;
 #[async_trait]
 pub trait Repository: Sync + Send {
     async fn find_all(&self) -> anyhow::Result<Vec<Book>>;
+    async fn find_all_by_filter(&self, filter: ListFilter) -> anyhow::Result<Vec<Book>> {
+        let books = self.find_all().await?;
+        Ok(books
+            .into_iter()
+            .filter(|book| filter.matches(book))
+            .collect())
+    }
     async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<Book>>;
     async fn create(&self, item: Book) -> anyhow::Result<()>;
     async fn update(&self, item: Book) -> anyhow::Result<()>;
     async fn delete(&self, item: Book, deleted_by: Uuid) -> anyhow::Result<()>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ListFilter {
+    All,
+    Eq(ListFilterField, ListFilterValue),
+    And(Box<ListFilter>, Box<ListFilter>),
+    Or(Box<ListFilter>, Box<ListFilter>),
+    Not(Box<ListFilter>),
+    None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListFilterField {
+    UserId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListFilterValue {
+    Uuid(Uuid),
+}
+
+impl ListFilter {
+    pub fn owned_by(user_id: Uuid) -> Self {
+        Self::Eq(ListFilterField::UserId, ListFilterValue::Uuid(user_id))
+    }
+
+    pub fn and(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::None, _) | (_, Self::None) => Self::None,
+            (Self::All, filter) | (filter, Self::All) => filter,
+            (left, right) if left == right => left,
+            (left, right) => Self::And(Box::new(left), Box::new(right)),
+        }
+    }
+
+    pub fn or(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::All, _) | (_, Self::All) => Self::All,
+            (Self::None, filter) | (filter, Self::None) => filter,
+            (left, right) if left == right => left,
+            (left, right) => Self::Or(Box::new(left), Box::new(right)),
+        }
+    }
+
+    pub fn negate(filter: Self) -> Self {
+        match filter {
+            Self::All => Self::None,
+            Self::None => Self::All,
+            Self::Not(inner) => *inner,
+            filter => Self::Not(Box::new(filter)),
+        }
+    }
+
+    pub fn matches(&self, book: &Book) -> bool {
+        match self {
+            Self::All => true,
+            Self::Eq(ListFilterField::UserId, ListFilterValue::Uuid(user_id)) => {
+                book.user_id() == user_id
+            }
+            Self::And(left, right) => left.matches(book) && right.matches(book),
+            Self::Or(left, right) => left.matches(book) || right.matches(book),
+            Self::Not(filter) => !filter.matches(book),
+            Self::None => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,9 +11,6 @@ entity Publisher;
 
 entity Shop;
 
-entity Dashboard;
-
-// MEMO: Endpointごとに作るのがベストプラクティス寄り
 action ListBooks appliesTo {
   principal: [User],
   resource: [Book]
@@ -96,5 +93,5 @@ action DeleteShop appliesTo {
 
 action GetAnnualSummary appliesTo {
   principal: [User],
-  resource: [Dashboard]
+  resource: [Book]
 };
