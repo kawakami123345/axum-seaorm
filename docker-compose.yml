@@ -10,16 +10,80 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d rust_web_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: keycloak
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_STRICT: "false"
     ports:
       - "8080:8080"
+      - "3000:3000"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/rust_web_db
+      APP_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
+      OIDC_ISSUER_URL: http://localhost:8080/realms/rust-web-realm
+      OIDC_LOGOUT_URL: http://localhost:8080/realms/rust-web-realm/protocol/openid-connect/logout
+      PORT: 3000
+    network_mode: service:keycloak
+    volumes:
+      - .:/app
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - cargo_target:/app/target
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/swagger-ui/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    command: >
+      bash -c "until curl -fsS http://localhost:8080/realms/rust-web-realm/.well-known/openid-configuration >/dev/null;
+      do echo 'waiting for keycloak realm...'; sleep 2; done; cargo run"
+
+  frontend:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    environment:
+      VITE_API_PROXY_TARGET: http://keycloak:3000
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: sh -c "npm install --include=optional && npm run dev -- --host 0.0.0.0"
 
 volumes:
   postgres_data:
+  cargo_registry:
+  cargo_git:
+  cargo_target:
+  frontend_node_modules:
