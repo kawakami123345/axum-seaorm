@@ -19,15 +19,17 @@ pub struct Publisher {
     id: i32,
     pub_id: Uuid,
     name: vo::PublisherName,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    updated_at: time::OffsetDateTime,
     created_by: Uuid,
     updated_by: Uuid,
 }
 
 impl Publisher {
     pub fn new(pub_id: Uuid, name: vo::PublisherName, created_by: Uuid) -> Self {
-        let now = chrono::Utc::now();
+        let now = time::OffsetDateTime::now_utc();
         Self {
             id: 0,
             pub_id,
@@ -43,8 +45,8 @@ impl Publisher {
         id: i32,
         pub_id: Uuid,
         name: vo::PublisherName,
-        created_at: chrono::DateTime<chrono::Utc>,
-        updated_at: chrono::DateTime<chrono::Utc>,
+        created_at: time::OffsetDateTime,
+        updated_at: time::OffsetDateTime,
         created_by: Uuid,
         updated_by: Uuid,
     ) -> Self {
@@ -68,10 +70,10 @@ impl Publisher {
     pub fn name(&self) -> &str {
         self.name.value()
     }
-    pub fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+    pub fn created_at(&self) -> time::OffsetDateTime {
         self.created_at
     }
-    pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
+    pub fn updated_at(&self) -> time::OffsetDateTime {
         self.updated_at
     }
     pub fn created_by(&self) -> &Uuid {
@@ -82,7 +84,7 @@ impl Publisher {
     }
 
     fn update_audit(&mut self, updated_by: Uuid) {
-        self.updated_at = chrono::Utc::now();
+        self.updated_at = time::OffsetDateTime::now_utc();
         self.updated_by = updated_by;
     }
 

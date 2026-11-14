@@ -14,8 +14,8 @@ pub struct Model {
     pub pub_id: Uuid,
     #[sea_orm(unique, column_type = "String(StringLen::N(32))")]
     pub name: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: time::OffsetDateTime,
+    pub updated_at: time::OffsetDateTime,
     pub created_by: Uuid,
     pub updated_by: Uuid,
 

@@ -9,6 +9,26 @@
 参照範囲の条件は `usecase/src/lib.rs` の `UserContext::book_filter` にまとめています。
 書籍のユースケースと年度別集計で共通利用し、DBのユーザーID条件は `infra/src/book.rs` にあります。
 
+## 日時と依存パッケージ
+
+ドメイン・API・SeaORMのDBモデルの日時には `time::OffsetDateTime` を使います。
+APIで受け取った申請日はUTCに揃えて保存し、年度もUTCで判定します。
+APIはRFC 3339の日時文字列と`null`を扱い、申請日を省略した場合も`null`として扱います。
+DBとの日時型変換は不要で、既存の `timestamp with time zone` 列をそのまま使えます。
+Chronoの直接依存はありませんが、SeaORMやOpenID Connectの間接依存としては残ります。
+
+TypeScriptは `typescript-eslint` の対応範囲に合わせて6.0系、reqwestはOpenID Connectとの互換性のため0.12系を使います。
+
+フロントエンドのAPIクライアントは `openapi.json` から開発サーバー・ビルドの起動時に自動生成します。
+生成先の `web/src/api/` はGitの管理対象外です。
+手書きの通信処理 `web/src/lib/custom-fetch.ts` はソースとして管理します。
+
+Postgresとの日時の読み書きは、開発DBの接続情報を使って確認できます。永続データの書き込みは行いません。
+
+```bash
+cargo test -p infra --features test postgres_timestamp_round_trip -- --ignored
+```
+
 ## 開発環境
 
 言語と開発コマンドはmise、開発コンテナとサーバーはDev Containerで管理します。

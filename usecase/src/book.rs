@@ -1,7 +1,7 @@
 use crate::{UserContext, error::UseCaseError};
-use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use time::UtcOffset;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -40,7 +40,10 @@ impl Service {
 
         Ok(books
             .into_iter()
-            .filter(|b| b.applied_at().is_some_and(|at| at.year() == year))
+            .filter(|b| {
+                b.applied_at()
+                    .is_some_and(|at| at.to_offset(UtcOffset::UTC).year() == year)
+            })
             .map(ResponseDto::from)
             .collect())
     }
@@ -218,7 +221,8 @@ pub struct UpdateDto {
 #[schema(as = BookChangeAppliedAtDto)]
 pub struct ChangeAppliedAtDto {
     #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
-    pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub applied_at: Option<time::OffsetDateTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -230,7 +234,8 @@ pub struct ResponseDto {
     pub publisher: BookPublisherDto,
     pub shop: Option<BookShopDto>,
     #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
-    pub applied_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub applied_at: Option<time::OffsetDateTime>,
     #[schema(value_type = String, example = "Real")]
     pub format: String,
     pub price: i32,
@@ -281,7 +286,6 @@ pub struct BookShopDto {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use chrono::TimeZone;
     use rstest::*;
     use std::{str::FromStr, sync::Mutex};
     use uuid::Uuid;
@@ -527,6 +531,93 @@ mod tests {
             .expect("Failed to get book");
         assert_eq!(fetched.pub_id, created.pub_id);
         assert_eq!(fetched.shop.unwrap().name, "Test Shop");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn applied_at_preserves_rfc3339_and_uses_the_utc_year(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, publishers, _) = service.await;
+        let publisher_id = Uuid::new_v4();
+        publishers.add(create_dummy_publisher(publisher_id));
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .create(
+                &ctx,
+                CreateDto {
+                    title: "Year boundary".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 100,
+                },
+            )
+            .await
+            .unwrap();
+        let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
+        let dto = serde_json::from_str(r#"{"applied_at":"2025-01-01T00:30:00.123456789+09:00"}"#)
+            .unwrap();
+        let response = service.change_applied_at(&ctx, pub_id, dto).await.unwrap();
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap()["applied_at"],
+            "2024-12-31T15:30:00.123456789Z"
+        );
+        assert_eq!(
+            service
+                .get_year_applied_books(&ctx, 2024)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            service
+                .get_year_applied_books(&ctx, 2025)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let dashboard = crate::dashboard::Service::new(service.repo.clone());
+        let summaries = dashboard.get_annual_summary(&ctx).await.unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].year, 2024);
+
+        for json in [r#"{"applied_at":null}"#, "{}"] {
+            let dto = serde_json::from_str(json).unwrap();
+            let response = service.change_applied_at(&ctx, pub_id, dto).await.unwrap();
+            assert!(serde_json::to_value(response).unwrap()["applied_at"].is_null());
+            assert!(dashboard.get_annual_summary(&ctx).await.unwrap().is_empty());
+        }
+
+        let outside_utc_range = time::Date::MAX
+            .with_hms(23, 59, 59)
+            .unwrap()
+            .assume_offset(UtcOffset::from_hms(-23, -59, 0).unwrap());
+        let result = service
+            .change_applied_at(
+                &ctx,
+                pub_id,
+                ChangeAppliedAtDto {
+                    applied_at: Some(outside_utc_range),
+                },
+            )
+            .await;
+        assert!(matches!(result, Err(UseCaseError::DomainRuleViolation(_))));
+        assert!(
+            service
+                .get(&ctx, pub_id)
+                .await
+                .unwrap()
+                .applied_at
+                .is_none()
+        );
     }
 
     #[rstest]
@@ -825,7 +916,10 @@ mod tests {
                 },
             )
             .await;
-        let applied_at = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let applied_at = time::Date::from_calendar_date(2024, time::Month::January, 1)
+            .unwrap()
+            .midnight()
+            .assume_utc();
         let applied = service
             .change_applied_at(
                 &actor,
@@ -893,7 +987,12 @@ mod tests {
             );
             if let Some(year) = year {
                 book.change_applied_at(
-                    Some(chrono::Utc.with_ymd_and_hms(year, 1, 1, 0, 0, 0).unwrap()),
+                    Some(
+                        time::Date::from_calendar_date(year, time::Month::January, 1)
+                            .unwrap()
+                            .midnight()
+                            .assume_utc(),
+                    ),
                     owner_id,
                 )
                 .unwrap();

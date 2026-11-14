@@ -38,16 +38,20 @@ infra = { workspace = true, features = ["test"] }
 
 [workspace.dependencies]
 # Web & Async
-axum = "0.8"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+axum = "0.8.9"
+tokio = { version = "1.54.1", features = ["full"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 # DB
-sea-orm = { version = "2.0.0-rc", features = [
+sea-orm = { version = "2.0.4", default-features = false, features = [
     "runtime-tokio-rustls",
     "sqlx-postgres",
     "macros",
+    "with-json",
+    "with-time",
+    "with-uuid",
+    "sqlite-use-returning-for-3_35",
 ] }
 
 
@@ -61,24 +65,24 @@ api = { path = "api" }
 migration = { path = "migration" }
 
 # Misc
-thiserror = "2"
-anyhow = "1.0"
-dotenvy = "0.15"
-async-trait = "0.1"
-utoipa = { version = "5", features = ["uuid"] }
-utoipa-axum = "0.2.0"
-utoipa-swagger-ui = { version = "9", features = ["axum"] }
-rstest = "0.26.1"
-uuid = { version = "1.19.0", features = ["serde", "v4", "v7"] }
-sea-orm-migration = { version = "2.0.0-rc", features = [
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+dotenvy = "0.15.7"
+async-trait = "0.1.92"
+utoipa = { version = "6", features = ["uuid", "time"] }
+utoipa-axum = "0.3"
+utoipa-swagger-ui = { version = "10.0.2", features = ["axum"] }
+rstest = "0.28"
+uuid = { version = "1.29.2", features = ["serde", "v4", "v7"] }
+sea-orm-migration = { version = "2.0.4", features = [
     "runtime-tokio-rustls",
     "sqlx-postgres",
 ] }
-chrono = { version = "0.4", features = ["serde"] }
-openidconnect = { version = "4", features = ["reqwest"] }
+openidconnect = { version = "4.1", features = ["reqwest"] }
 tower-cookies = { version = "0.11", features = ["private"] }
+# openidconnect 4.x uses the reqwest 0.12 HTTP client.
 reqwest = "0.12"
-tracing = "0.1"
-base64 = "0.22.1"
-time = "0.3"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+tracing = "0.1.44"
+base64 = "0.23.1"
+time = { version = "0.3.55", features = ["serde-well-known"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

@@ -8,7 +8,7 @@ pub struct Model {
     pub history_id: i32,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub operation_type: String, // 'INSERT', 'UPDATE', 'DELETE'
-    pub operation_at: chrono::DateTime<chrono::Utc>,
+    pub operation_at: time::OffsetDateTime,
     pub operation_by: Uuid,
 
     // Copies from Publisher
@@ -16,8 +16,8 @@ pub struct Model {
     pub pub_id: Uuid,
     #[sea_orm(column_type = "String(StringLen::N(32))")]
     pub name: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: time::OffsetDateTime,
+    pub updated_at: time::OffsetDateTime,
     pub created_by: Uuid,
     pub updated_by: Uuid,
 }

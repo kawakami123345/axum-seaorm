@@ -37,11 +37,14 @@ pub struct Book {
     author: vo::BookAuthor,
     publisher: publisher::Publisher,
     shop: Option<shop::Shop>,
-    applied_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    applied_at: Option<time::OffsetDateTime>,
     format: vo::BookFormat,
     price: vo::BookPrice,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    updated_at: time::OffsetDateTime,
     created_by: Uuid,
     updated_by: Uuid,
     user_id: Uuid,
@@ -60,7 +63,7 @@ impl Book {
         created_by: Uuid,
         user_id: Uuid,
     ) -> Self {
-        let now = chrono::Utc::now();
+        let now = time::OffsetDateTime::now_utc();
         Self {
             id: 0,
             pub_id,
@@ -87,11 +90,11 @@ impl Book {
         author: vo::BookAuthor,
         publisher: publisher::Publisher,
         shop: Option<shop::Shop>,
-        applied_at: Option<chrono::DateTime<chrono::Utc>>,
+        applied_at: Option<time::OffsetDateTime>,
         format: vo::BookFormat,
         price: vo::BookPrice,
-        created_at: chrono::DateTime<chrono::Utc>,
-        updated_at: chrono::DateTime<chrono::Utc>,
+        created_at: time::OffsetDateTime,
+        updated_at: time::OffsetDateTime,
         created_by: Uuid,
         updated_by: Uuid,
         user_id: Uuid,
@@ -132,7 +135,7 @@ impl Book {
     pub fn shop(&self) -> &Option<shop::Shop> {
         &self.shop
     }
-    pub fn applied_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    pub fn applied_at(&self) -> Option<time::OffsetDateTime> {
         self.applied_at
     }
     pub fn format(&self) -> vo::BookFormat {
@@ -141,10 +144,10 @@ impl Book {
     pub fn price(&self) -> i32 {
         self.price.value()
     }
-    pub fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+    pub fn created_at(&self) -> time::OffsetDateTime {
         self.created_at
     }
-    pub fn updated_at(&self) -> chrono::DateTime<chrono::Utc> {
+    pub fn updated_at(&self) -> time::OffsetDateTime {
         self.updated_at
     }
     pub fn created_by(&self) -> &Uuid {
@@ -158,7 +161,7 @@ impl Book {
     }
 
     fn update_audit(&mut self, updated_by: Uuid) {
-        self.updated_at = chrono::Utc::now();
+        self.updated_at = time::OffsetDateTime::now_utc();
         self.updated_by = updated_by;
     }
 
@@ -191,9 +194,18 @@ impl Book {
 
     pub fn change_applied_at(
         &mut self,
-        applied_at: Option<chrono::DateTime<chrono::Utc>>,
+        applied_at: Option<time::OffsetDateTime>,
         updated_by: Uuid,
     ) -> Result<(), DomainError> {
+        let applied_at = applied_at
+            .map(|at| {
+                at.checked_to_offset(time::UtcOffset::UTC).ok_or_else(|| {
+                    DomainError::InvalidFormat(
+                        "Applied date is outside the supported UTC range".into(),
+                    )
+                })
+            })
+            .transpose()?;
         self.applied_at = applied_at;
         self.update_audit(updated_by);
         Ok(())

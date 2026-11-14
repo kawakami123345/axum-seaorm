@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { BookResponseDto, BookCreateDto, BookUpdateDto } from '../api/model';
 import { useGetAllPublishers, type getAllPublishersResponse } from '../api/endpoints/publisher/publisher';
 import { useGetAllShops, type getAllShopsResponse } from '../api/endpoints/shop/shop';
@@ -11,7 +11,12 @@ interface BookModalProps {
     isSubmitting?: boolean;
 }
 
-const BookModal = ({ isOpen, onClose, onSubmit, book, isSubmitting }: BookModalProps) => {
+const BookModal = ({ isOpen, ...props }: BookModalProps) => {
+    if (!isOpen) return null;
+    return <BookModalForm key={props.book?.pub_id ?? 'new'} {...props} />;
+};
+
+const BookModalForm = ({ onClose, onSubmit, book, isSubmitting }: Omit<BookModalProps, 'isOpen'>) => {
     const { data: publishersData, isLoading: isLoadingPublishers } = useGetAllPublishers<getAllPublishersResponse, Error>();
     const publishers = publishersData?.data || [];
 
@@ -20,39 +25,14 @@ const BookModal = ({ isOpen, onClose, onSubmit, book, isSubmitting }: BookModalP
 
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    const [formData, setFormData] = useState<BookCreateDto>({
-        title: '',
-        author: '',
-        price: 0,
-        publisher_id: '',
-        format: 'Real',
-        shop_id: null,
-    });
-
-    useEffect(() => {
-        setErrorMsg(null);
-        if (book) {
-            setFormData({
-                title: book.title,
-                author: book.author,
-                price: book.price,
-                publisher_id: book.publisher.pub_id,
-                format: book.format || 'Real',
-                shop_id: book.shop?.pub_id || null,
-            });
-        } else {
-            setFormData({
-                title: '',
-                author: '',
-                price: 0,
-                publisher_id: '',
-                format: 'Real',
-                shop_id: null,
-            });
-        }
-    }, [book, isOpen]);
-
-    if (!isOpen) return null;
+    const [formData, setFormData] = useState<BookCreateDto>(() => ({
+        title: book?.title ?? '',
+        author: book?.author ?? '',
+        price: book?.price ?? 0,
+        publisher_id: book?.publisher.pub_id ?? '',
+        format: book?.format || 'Real',
+        shop_id: book?.shop?.pub_id ?? null,
+    }));
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

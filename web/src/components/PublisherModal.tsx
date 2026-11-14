@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { PublisherResponseDto, PublisherCreateDto, PublisherUpdateDto } from '../api/model';
 
 interface PublisherModalProps {
@@ -9,24 +9,15 @@ interface PublisherModalProps {
     isSubmitting?: boolean;
 }
 
-const PublisherModal = ({ isOpen, onClose, onSubmit, publisher, isSubmitting }: PublisherModalProps) => {
-    const [formData, setFormData] = useState<PublisherCreateDto>({
-        name: '',
-    });
-
-    useEffect(() => {
-        if (publisher) {
-            setFormData({
-                name: publisher.name,
-            });
-        } else {
-            setFormData({
-                name: '',
-            });
-        }
-    }, [publisher, isOpen]);
-
+const PublisherModal = ({ isOpen, ...props }: PublisherModalProps) => {
     if (!isOpen) return null;
+    return <PublisherModalForm key={props.publisher?.pub_id ?? 'new'} {...props} />;
+};
+
+const PublisherModalForm = ({ onClose, onSubmit, publisher, isSubmitting }: Omit<PublisherModalProps, 'isOpen'>) => {
+    const [formData, setFormData] = useState<PublisherCreateDto>(() => ({
+        name: publisher?.name ?? '',
+    }));
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

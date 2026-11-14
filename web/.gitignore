@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Keep generated clients under src/api trackable.
+# Generated API clients
 /api/
+/src/api/

@@ -10,6 +10,9 @@ pub mod publisher;
 pub mod publisher_history;
 pub mod shop;
 
+#[cfg(test)]
+mod tests;
+
 #[async_trait::async_trait]
 pub trait BeginWithUser {
     async fn begin_with_user(&self, user_id: &Uuid) -> Result<DatabaseTransaction, DbErr>;

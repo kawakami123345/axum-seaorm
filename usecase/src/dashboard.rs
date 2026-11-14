@@ -1,7 +1,7 @@
 use crate::{UserContext, error::UseCaseError};
-use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
+use time::UtcOffset;
 use utoipa::ToSchema;
 
 const ANNUAL_BUDGET: i32 = 20_000;
@@ -34,7 +34,9 @@ impl Service {
         let mut annual_totals = BTreeMap::<i32, AnnualTotals>::new();
         for book in books {
             if let Some(applied_at) = book.applied_at() {
-                let totals = annual_totals.entry(applied_at.year()).or_default();
+                let totals = annual_totals
+                    .entry(applied_at.to_offset(UtcOffset::UTC).year())
+                    .or_default();
                 totals.count += 1;
                 totals.total_amount += book.price();
             }
@@ -69,7 +71,6 @@ pub struct DashboardDto {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use chrono::TimeZone;
     use std::{
         str::FromStr,
         sync::{Arc, Mutex},
@@ -155,7 +156,12 @@ mod tests {
             user_id,
         );
         book.change_applied_at(
-            Some(chrono::Utc.with_ymd_and_hms(year, 1, 1, 0, 0, 0).unwrap()),
+            Some(
+                time::Date::from_calendar_date(year, time::Month::January, 1)
+                    .unwrap()
+                    .midnight()
+                    .assume_utc(),
+            ),
             user_id,
         )
         .unwrap();
