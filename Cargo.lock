@@ -146,7 +146,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "axum-extra",
  "base64 0.22.1",
  "openidconnect",
  "reqwest",
@@ -405,28 +404,6 @@ dependencies = [
  "mime",
  "pin-project-lite",
  "sync_wrapper",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "axum-extra"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fef252edff26ddba56bbcdf2ee3307b8129acb86f5749b68990c168a6fcc9c76"
-dependencies = [
- "axum",
- "axum-core",
- "bytes",
- "cookie",
- "futures-core",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -1808,17 +1785,14 @@ name = "infra"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "api",
  "async-trait",
  "book",
  "chrono",
- "openidconnect",
  "publisher",
  "sea-orm",
  "serde",
  "shop",
  "tokio",
- "usecase",
  "uuid",
 ]
 
@@ -3006,22 +2980,18 @@ dependencies = [
  "anyhow",
  "api",
  "axum",
- "axum-extra",
  "book",
  "dotenvy",
  "infra",
  "migration",
- "openidconnect",
  "publisher",
  "reqwest",
- "rstest",
  "sea-orm",
  "shop",
  "tokio",
  "tower-cookies",
  "tracing-subscriber",
  "usecase",
- "uuid",
 ]
 
 [[package]]
@@ -4384,7 +4354,6 @@ dependencies = [
  "async-trait",
  "book",
  "chrono",
- "itertools 0.14.0",
  "publisher",
  "rstest",
  "serde",

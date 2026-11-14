@@ -17,3 +17,10 @@ pub enum UseCaseError {
     #[error("Domain error occurred: {0}")]
     ShopDomainError(#[from] shop::DomainError),
 }
+
+impl UseCaseError {
+    pub(crate) fn database(operation: &str, error: anyhow::Error) -> Self {
+        eprintln!("Database error in {operation}: {error:?}");
+        Self::DatabaseError
+    }
+}

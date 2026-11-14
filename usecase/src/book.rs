@@ -3,14 +3,7 @@ use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
-
-pub(crate) fn list_filter(ctx: &UserContext) -> book::ListFilter {
-    if ctx.is_admin() {
-        book::ListFilter::All
-    } else {
-        book::ListFilter::OwnedBy(*ctx.user_id())
-    }
-}
+use uuid::Uuid;
 
 pub struct Service {
     repo: Arc<dyn book::Repository>,
@@ -45,48 +38,55 @@ impl Service {
     ) -> Result<Vec<ResponseDto>, UseCaseError> {
         let books = self.find_authorized_books(ctx).await?;
 
-        let books: Vec<book::Book> = books
+        Ok(books
             .into_iter()
             .filter(|b| b.applied_at().is_some_and(|at| at.year() == year))
-            .collect();
-
-        let response_dtos = books.into_iter().map(ResponseDto::from).collect();
-
-        Ok(response_dtos)
+            .map(ResponseDto::from)
+            .collect())
     }
 
     async fn find_authorized_books(
         &self,
         ctx: &UserContext,
     ) -> Result<Vec<book::Book>, UseCaseError> {
-        self.repo.find_all(list_filter(ctx)).await.map_err(|e| {
-            eprintln!("Database error in list books: {:?}", e);
-            UseCaseError::DatabaseError
-        })
+        self.repo
+            .find_all(ctx.book_filter())
+            .await
+            .map_err(|e| UseCaseError::database("list books", e))
     }
 
-    pub async fn get(
-        &self,
-        ctx: &UserContext,
-        pub_id: uuid::Uuid,
-    ) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(&self, ctx: &UserContext, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
         Ok(self.find_book(ctx, pub_id).await?.into())
     }
 
-    async fn find_book(
-        &self,
-        ctx: &UserContext,
-        pub_id: uuid::Uuid,
-    ) -> Result<book::Book, UseCaseError> {
+    async fn find_book(&self, ctx: &UserContext, pub_id: Uuid) -> Result<book::Book, UseCaseError> {
         self.repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in find book: {:?}", e);
-                UseCaseError::DatabaseError
-            })?
-            .filter(|book| list_filter(ctx).matches(book))
-            .ok_or(UseCaseError::NotFound("Book not found".into()))
+            .map_err(|e| UseCaseError::database("find book", e))?
+            .filter(|book| ctx.book_filter().matches(book))
+            .ok_or_else(|| UseCaseError::NotFound("Book not found".into()))
+    }
+
+    async fn find_publisher(&self, pub_id: Uuid) -> Result<publisher::Publisher, UseCaseError> {
+        self.publisher_repo
+            .find_by_pub_id(pub_id)
+            .await
+            .map_err(|e| UseCaseError::database("find book publisher", e))?
+            .ok_or_else(|| UseCaseError::DomainRuleViolation("Publisher not found".into()))
+    }
+
+    async fn find_shop(&self, pub_id: Option<Uuid>) -> Result<Option<shop::Shop>, UseCaseError> {
+        let Some(pub_id) = pub_id else {
+            return Ok(None);
+        };
+
+        self.shop_repo
+            .find_by_pub_id(pub_id)
+            .await
+            .map_err(|e| UseCaseError::database("find book shop", e))?
+            .ok_or_else(|| UseCaseError::DomainRuleViolation("Shop not found".into()))
+            .map(Some)
     }
 
     pub async fn create(&self, ctx: &UserContext, dto: CreateDto) -> Result<(), UseCaseError> {
@@ -98,56 +98,31 @@ impl Service {
             _ => book::vo::BookFormat::Real,
         };
 
-        let publisher = self
-            .publisher_repo
-            .find_by_pub_id(dto.publisher_id)
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
-            .ok_or(UseCaseError::DomainRuleViolation(
-                "Publisher not found".into(),
-            ))?;
-
-        let shop = if let Some(shop_id) = dto.shop_id {
-            self.shop_repo
-                .find_by_pub_id(shop_id)
-                .await
-                .map_err(|e| {
-                    eprintln!("Database error in create book (find shop): {:?}", e);
-                    UseCaseError::DatabaseError
-                })?
-                .ok_or(UseCaseError::DomainRuleViolation("Shop not found".into()))
-                .map(Some)?
-        } else {
-            None
-        };
+        let publisher = self.find_publisher(dto.publisher_id).await?;
+        let shop = self.find_shop(dto.shop_id).await?;
 
         let book = book::Book::new(
-            uuid::Uuid::now_v7(),
+            Uuid::now_v7(),
             title,
             author,
             publisher,
             shop,
             format,
             price,
-            ctx.user_id,
-            ctx.user_id,
+            *ctx.user_id(),
+            *ctx.user_id(),
         );
 
-        self.repo.create(book).await.map_err(|e| {
-            eprintln!("Database error in create book: {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        Ok(())
+        self.repo
+            .create(book)
+            .await
+            .map_err(|e| UseCaseError::database("create book", e))
     }
 
     pub async fn update(
         &self,
         ctx: &UserContext,
-        pub_id: uuid::Uuid,
+        pub_id: Uuid,
         dto: UpdateDto,
     ) -> Result<(), UseCaseError> {
         let title = book::vo::BookTitle::new(dto.title)?;
@@ -160,77 +135,58 @@ impl Service {
 
         let mut book = self.find_book(ctx, pub_id).await?;
 
-        // Resolve Publisher
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
-            self.publisher_repo
-                .find_by_pub_id(dto.publisher_id)
-                .await
-                .map_err(|e| {
-                    eprintln!("Database error in create book (find publisher): {:?}", e);
-                    UseCaseError::DatabaseError
-                })?
-                .ok_or(UseCaseError::DomainRuleViolation(
-                    "Publisher not found".to_string(),
-                ))?
+            self.find_publisher(dto.publisher_id).await?
         } else {
             book.publisher().clone()
         };
 
-        // Resolve Shop
-        let shop = if let Some(shop_id) = dto.shop_id {
-            Some(
-                self.shop_repo
-                    .find_by_pub_id(shop_id)
-                    .await
-                    .map_err(|e| {
-                        eprintln!("Database error in create book (find publisher): {:?}", e);
-                        UseCaseError::DatabaseError
-                    })?
-                    .ok_or(UseCaseError::DomainRuleViolation(
-                        "Shop not found".to_string(),
-                    ))?,
-            )
-        } else {
-            None
-        };
+        let shop = self.find_shop(dto.shop_id).await?;
 
-        book.update(title, author, publisher, shop, format, price, ctx.user_id)
-            .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
+        book.update(
+            title,
+            author,
+            publisher,
+            shop,
+            format,
+            price,
+            *ctx.user_id(),
+        )
+        .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo.update(book).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        Ok(())
+        self.repo
+            .update(book)
+            .await
+            .map_err(|e| UseCaseError::database("update book", e))
     }
 
-    pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
         let book = self.find_book(ctx, pub_id).await?;
 
-        self.repo.delete(book, ctx.user_id).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-        Ok(())
+        self.repo
+            .delete(book, *ctx.user_id())
+            .await
+            .map_err(|e| UseCaseError::database("delete book", e))
     }
+
     pub async fn change_applied_at(
         &self,
         ctx: &UserContext,
-        pub_id: uuid::Uuid,
+        pub_id: Uuid,
         dto: ChangeAppliedAtDto,
     ) -> Result<ResponseDto, UseCaseError> {
         let mut book = self.find_book(ctx, pub_id).await?;
 
-        book.change_applied_at(dto.applied_at, ctx.user_id)
+        book.change_applied_at(dto.applied_at, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo.update(book.clone()).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        let response = ResponseDto::from(&book);
+        self.repo
+            .update(book)
+            .await
+            .map_err(|e| UseCaseError::database("change book applied date", e))?;
 
-        Ok(book.into())
+        Ok(response)
     }
 }
 
@@ -282,6 +238,12 @@ pub struct ResponseDto {
 
 impl From<book::Book> for ResponseDto {
     fn from(book: book::Book) -> Self {
+        Self::from(&book)
+    }
+}
+
+impl From<&book::Book> for ResponseDto {
+    fn from(book: &book::Book) -> Self {
         Self {
             pub_id: book.pub_id(),
             title: book.title().to_string(),
@@ -565,6 +527,146 @@ mod tests {
             .expect("Failed to get book");
         assert_eq!(fetched.pub_id, created.pub_id);
         assert_eq!(fetched.shop.unwrap().name, "Test Shop");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn update_changes_publisher_and_can_set_and_clear_shop(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, publishers, shops) = service.await;
+        let publisher_id = Uuid::new_v4();
+        let next_publisher_id = Uuid::new_v4();
+        let shop_id = Uuid::new_v4();
+        publishers.add(create_dummy_publisher(publisher_id));
+        publishers.add(create_dummy_publisher(next_publisher_id));
+        shops.add(create_dummy_shop(shop_id));
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .create(
+                &ctx,
+                CreateDto {
+                    title: "Original".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 100,
+                },
+            )
+            .await
+            .unwrap();
+        let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
+
+        for shop_id in [Some(shop_id), None] {
+            service
+                .update(
+                    &ctx,
+                    pub_id,
+                    UpdateDto {
+                        title: "Updated".into(),
+                        author: "New Author".into(),
+                        publisher_id: next_publisher_id,
+                        shop_id,
+                        format: Some("EBook".into()),
+                        price: 200,
+                    },
+                )
+                .await
+                .unwrap();
+
+            let updated = service.get(&ctx, pub_id).await.unwrap();
+            assert_eq!(updated.title, "Updated");
+            assert_eq!(updated.author, "New Author");
+            assert_eq!(updated.publisher.pub_id, next_publisher_id);
+            assert_eq!(updated.shop.map(|shop| shop.pub_id), shop_id);
+            assert_eq!(updated.format, "EBook");
+            assert_eq!(updated.price, 200);
+        }
+    }
+
+    #[rstest]
+    #[case::create_without_publisher(false, true)]
+    #[case::create_without_shop(false, false)]
+    #[case::update_without_publisher(true, true)]
+    #[case::update_without_shop(true, false)]
+    #[tokio::test]
+    async fn missing_related_entity_does_not_persist_book_changes(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+        #[case] updating: bool,
+        #[case] missing_publisher: bool,
+    ) {
+        let (service, publishers, _) = service.await;
+        let publisher_id = Uuid::new_v4();
+        publishers.add(create_dummy_publisher(publisher_id));
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        let create_dto = || CreateDto {
+            title: "Original".into(),
+            author: "Author".into(),
+            publisher_id,
+            shop_id: None,
+            format: None,
+            price: 100,
+        };
+        if updating {
+            service.create(&ctx, create_dto()).await.unwrap();
+        }
+
+        let mut dto = create_dto();
+        dto.title = "Changed".into();
+        dto.price = 200;
+        if missing_publisher {
+            dto.publisher_id = Uuid::new_v4();
+        } else {
+            dto.shop_id = Some(Uuid::new_v4());
+        }
+        let result = if updating {
+            let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
+            service
+                .update(
+                    &ctx,
+                    pub_id,
+                    UpdateDto {
+                        title: dto.title,
+                        author: dto.author,
+                        publisher_id: dto.publisher_id,
+                        shop_id: dto.shop_id,
+                        format: dto.format,
+                        price: dto.price,
+                    },
+                )
+                .await
+        } else {
+            service.create(&ctx, dto).await
+        };
+
+        let expected = if missing_publisher {
+            "Publisher not found"
+        } else {
+            "Shop not found"
+        };
+        assert!(matches!(
+            result,
+            Err(UseCaseError::DomainRuleViolation(message)) if message == expected
+        ));
+        let books = service.get_all(&ctx).await.unwrap();
+        if updating {
+            assert_eq!(books.len(), 1);
+            assert_eq!(books[0].title, "Original");
+            assert_eq!(books[0].price, 100);
+            assert_eq!(books[0].publisher.pub_id, publisher_id);
+            assert!(books[0].shop.is_none());
+        } else {
+            assert!(books.is_empty());
+        }
     }
 
     #[rstest]

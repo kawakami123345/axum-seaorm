@@ -1,9 +1,16 @@
 use crate::{UserContext, error::UseCaseError};
 use chrono::Datelike;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use utoipa::ToSchema;
+
+const ANNUAL_BUDGET: i32 = 20_000;
+
+#[derive(Default)]
+struct AnnualTotals {
+    count: i32,
+    total_amount: i32,
+}
 
 pub struct Service {
     book_repo: Arc<dyn book::Repository>,
@@ -20,46 +27,30 @@ impl Service {
     ) -> Result<Vec<DashboardDto>, UseCaseError> {
         let books = self
             .book_repo
-            .find_all(crate::book::list_filter(ctx))
+            .find_all(ctx.book_filter())
             .await
-            .map_err(|_| UseCaseError::DatabaseError)?;
+            .map_err(|e| UseCaseError::database("list books for annual summary", e))?;
 
-        let mut applied_books: Vec<book::Book> = books
+        let mut annual_totals = BTreeMap::<i32, AnnualTotals>::new();
+        for book in books {
+            if let Some(applied_at) = book.applied_at() {
+                let totals = annual_totals.entry(applied_at.year()).or_default();
+                totals.count += 1;
+                totals.total_amount += book.price();
+            }
+        }
+
+        Ok(annual_totals
             .into_iter()
-            .filter(|b| b.applied_at().is_some())
-            .collect();
-
-        // Sort by year for grouping
-        applied_books.sort_by_key(|b| b.applied_at().unwrap().year());
-
-        let summaries = applied_books
-            .into_iter()
-            .chunk_by(|b| b.applied_at().unwrap().year())
-            .into_iter()
-            .map(|(year, group)| {
-                let books: Vec<book::Book> = group.collect();
-                let count = books.len() as i32;
-                let total_amount: i32 = books.iter().map(|b| b.price()).sum();
-                let limit = 20000;
-                let balance = limit - total_amount;
-                let average = if count > 0 {
-                    total_amount as f64 / count as f64
-                } else {
-                    0.0
-                };
-
-                DashboardDto {
-                    year,
-                    limit,
-                    total_amount,
-                    balance,
-                    count,
-                    average,
-                }
+            .map(|(year, totals)| DashboardDto {
+                year,
+                limit: ANNUAL_BUDGET,
+                total_amount: totals.total_amount,
+                balance: ANNUAL_BUDGET - totals.total_amount,
+                count: totals.count,
+                average: totals.total_amount as f64 / totals.count as f64,
             })
-            .collect();
-
-        Ok(summaries)
+            .collect())
     }
 }
 
@@ -169,6 +160,49 @@ mod tests {
         )
         .unwrap();
         book
+    }
+
+    #[tokio::test]
+    async fn annual_summary_calculates_totals_in_ascending_year_order() {
+        let repo = Arc::new(FakeBookRepository::new());
+        let user_id = Uuid::new_v4();
+        repo.add(applied_book(user_id, 15_000, 2025));
+        repo.add(applied_book(user_id, 0, 2023));
+        repo.add(applied_book(user_id, 10_001, 2025));
+        let service = Service::new(repo);
+        let ctx = UserContext::new(user_id, vec![]);
+
+        let summaries = service.get_annual_summary(&ctx).await.unwrap();
+        assert_eq!(summaries.len(), 2);
+        let zero_price = &summaries[0];
+        assert_eq!(zero_price.year, 2023);
+        assert_eq!(zero_price.count, 1);
+        assert_eq!(zero_price.limit, 20_000);
+        assert_eq!(zero_price.total_amount, 0);
+        assert_eq!(zero_price.balance, 20_000);
+        assert_eq!(zero_price.average, 0.0);
+
+        let over_budget = &summaries[1];
+        assert_eq!(over_budget.year, 2025);
+        assert_eq!(over_budget.count, 2);
+        assert_eq!(over_budget.limit, 20_000);
+        assert_eq!(over_budget.total_amount, 25_001);
+        assert_eq!(over_budget.balance, -5_001);
+        assert_eq!(over_budget.average, 12_500.5);
+    }
+
+    #[tokio::test]
+    async fn annual_summary_is_empty_without_applied_books() {
+        let repo = Arc::new(FakeBookRepository::new());
+        let service = Service::new(repo.clone());
+        let user_id = Uuid::new_v4();
+        let ctx = UserContext::new(user_id, vec![]);
+        assert!(service.get_annual_summary(&ctx).await.unwrap().is_empty());
+
+        let mut unapplied = applied_book(user_id, 1_000, 2024);
+        unapplied.change_applied_at(None, user_id).unwrap();
+        repo.add(unapplied);
+        assert!(service.get_annual_summary(&ctx).await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -15,7 +15,6 @@ utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true }
 openidconnect = { workspace = true }
-axum-extra = { workspace = true }
 tower-cookies = { workspace = true }
 
 anyhow = { workspace = true }

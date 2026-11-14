@@ -13,10 +13,11 @@ impl Service {
     }
 
     pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let shops = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in list shops: {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        let shops = self
+            .repo
+            .find_all()
+            .await
+            .map_err(|e| UseCaseError::database("list shops", e))?;
 
         Ok(shops.into_iter().map(ResponseDto::from).collect())
     }
@@ -26,10 +27,7 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find shop", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
@@ -43,13 +41,12 @@ impl Service {
 
         let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
 
-        self.repo.create(shop).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        Ok(())
+        self.repo
+            .create(shop)
+            .await
+            .map_err(|e| UseCaseError::database("create shop", e))
     }
+
     pub async fn update(
         &self,
         ctx: &UserContext,
@@ -60,10 +57,7 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find shop", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
@@ -74,12 +68,10 @@ impl Service {
         shop.update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo.update(shop).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        Ok(())
+        self.repo
+            .update(shop)
+            .await
+            .map_err(|e| UseCaseError::database("update shop", e))
     }
 
     pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
@@ -87,21 +79,16 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find shop", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Shop with pub_id = {} not found",
                 pub_id
             )))?;
 
-        self.repo.delete(shop, *ctx.user_id()).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-
-        Ok(())
+        self.repo
+            .delete(shop, *ctx.user_id())
+            .await
+            .map_err(|e| UseCaseError::database("delete shop", e))
     }
 }
 

@@ -4,6 +4,7 @@ pub mod error;
 pub mod publisher;
 pub mod shop;
 
+use ::book::ListFilter;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +21,14 @@ impl UserContext {
 
     pub fn is_admin(&self) -> bool {
         self.roles.iter().any(|r| r == "admin")
+    }
+
+    pub(crate) fn book_filter(&self) -> ListFilter {
+        if self.is_admin() {
+            ListFilter::All
+        } else {
+            ListFilter::OwnedBy(self.user_id)
+        }
     }
 
     pub fn user_id(&self) -> &Uuid {

@@ -14,10 +14,11 @@ impl Service {
     }
 
     pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let publishers = self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in list publishers: {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
+        let publishers = self
+            .repo
+            .find_all()
+            .await
+            .map_err(|e| UseCaseError::database("list publishers", e))?;
 
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
@@ -27,10 +28,7 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find publisher", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
@@ -43,11 +41,10 @@ impl Service {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
 
-        self.repo.create(publisher).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-        Ok(())
+        self.repo
+            .create(publisher)
+            .await
+            .map_err(|e| UseCaseError::database("create publisher", e))
     }
 
     pub async fn update(
@@ -61,10 +58,7 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find publisher", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher not found with pub_id = {}",
                 pub_id
@@ -74,11 +68,10 @@ impl Service {
             .update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo.update(publisher).await.map_err(|e| {
-            eprintln!("Database error in create book (find publisher): {:?}", e);
-            UseCaseError::DatabaseError
-        })?;
-        Ok(())
+        self.repo
+            .update(publisher)
+            .await
+            .map_err(|e| UseCaseError::database("update publisher", e))
     }
 
     pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
@@ -86,10 +79,7 @@ impl Service {
             .repo
             .find_by_pub_id(pub_id)
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
+            .map_err(|e| UseCaseError::database("find publisher", e))?
             .ok_or(UseCaseError::NotFound(format!(
                 "Publisher with pub_id = {} not found",
                 pub_id
@@ -98,11 +88,7 @@ impl Service {
         self.repo
             .delete(publisher, *ctx.user_id())
             .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?;
-        Ok(())
+            .map_err(|e| UseCaseError::database("delete publisher", e))
     }
 }
 
