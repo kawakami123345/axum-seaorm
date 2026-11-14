@@ -3,11 +3,17 @@ rust = "latest"
 bun = "latest"
 node = "26"
 codex = "latest"
+orval = "latest"
 
 [tasks.setup]
 description = "Install frontend dependencies from the Bun lockfile"
 dir = "{{config_root}}/web"
 run = "bun install --frozen-lockfile"
+
+[tasks.orval]
+description = "Generate the frontend API client from openapi.json"
+dir = "{{config_root}}/web"
+run = "bun run generate-api"
 
 [tasks.dev]
 description = "Start the backend and frontend together (Ctrl+C stops both)"

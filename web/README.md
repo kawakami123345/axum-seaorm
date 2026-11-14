@@ -13,4 +13,4 @@ APIも同時に起動する場合は`mise run dev`を使います。
 `/api`へのリクエストはViteからAxumへ転送されます。
 
 依存を変更する場合は`web`で`bun add` / `bun remove`を使い、`bun.lock`を更新します。
-OpenAPIクライアントの再生成は`web`で`bun run generate-api`を実行します。
+OpenAPIクライアントの再生成は、リポジトリのルートから`mise run orval`を実行します。

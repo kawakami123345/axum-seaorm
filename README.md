@@ -83,6 +83,7 @@ mise run dev           # APIとフロントエンドを起動
 mise run dev:backend   # APIのみ
 mise run dev:frontend  # フロントエンドのみ
 mise run setup         # bun.lockから依存を再インストール
+mise run orval         # OpenAPIからAPIクライアントを生成
 mise run check         # Rustのチェックとフロントエンドのビルド
 mise run test          # Rustワークスペースのテスト
 ```
