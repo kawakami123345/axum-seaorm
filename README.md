@@ -7,7 +7,7 @@
 | 設定 | 管理するもの |
 | --- | --- |
 | `mise.toml` | 言語・ツールのバージョンと設定、開発・検証コマンド |
-| `.devcontainer/devcontainer.json` | DB・OIDC接続用ENV（`remoteEnv`）、ポート転送、接続先、miseの導入 |
+| `.devcontainer/devcontainer.json` | DB・OIDC接続用ENV（`remoteEnv`）、ポート転送、接続先、miseの導入、VS Code拡張 |
 | `.devcontainer/compose.yaml` | 各サーバー自身の起動設定、コンテナ間接続、起動待ち、データ永続化 |
 | `.devcontainer/keycloak/realm-export.json` | 開発用Realm・OIDCクライアント・ユーザー |
 
