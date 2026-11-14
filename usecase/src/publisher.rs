@@ -1,4 +1,4 @@
-use crate::{UserContext, cedar, error::UseCaseError};
+use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -13,27 +13,16 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let publishers = match cedar::authorize_list_query(
-            ctx,
-            cedar::ACTION_LIST_PUBLISHERS,
-            cedar::ENTITY_TYPE_PUBLISHER,
-        )? {
-            cedar::PolicyEvaluation::Allow => self.find_all().await?,
-            cedar::PolicyEvaluation::Deny => Vec::new(),
-        };
+    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let publishers = self.repo.find_all().await.map_err(|e| {
+            eprintln!("Database error in list publishers: {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(publishers.into_iter().map(ResponseDto::from).collect())
     }
 
-    async fn find_all(&self) -> Result<Vec<publisher::Publisher>, UseCaseError> {
-        self.repo.find_all().await.map_err(|e| {
-            eprintln!("Database error in list publishers: {:?}", e);
-            UseCaseError::DatabaseError
-        })
-    }
-
-    pub async fn get(&self, ctx: &UserContext, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(&self, pub_id: Uuid) -> Result<ResponseDto, UseCaseError> {
         let publisher = self
             .repo
             .find_by_pub_id(pub_id)
@@ -47,16 +36,12 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_publisher_action(ctx, cedar::ACTION_GET_PUBLISHER, &publisher)?;
-
         Ok(publisher.into())
     }
 
     pub async fn create(&self, ctx: &UserContext, dto: CreateDto) -> Result<(), UseCaseError> {
         let name = publisher::vo::PublisherName::new(dto.name)?;
         let publisher = publisher::Publisher::new(Uuid::now_v7(), name, *ctx.user_id());
-
-        cedar::authorize_publisher_action(ctx, cedar::ACTION_CREATE_PUBLISHER, &publisher)?;
 
         self.repo.create(publisher).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -85,8 +70,6 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_publisher_action(ctx, cedar::ACTION_UPDATE_PUBLISHER, &publisher)?;
-
         publisher
             .update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
@@ -111,8 +94,6 @@ impl Service {
                 "Publisher with pub_id = {} not found",
                 pub_id
             )))?;
-
-        cedar::authorize_publisher_action(ctx, cedar::ACTION_DELETE_PUBLISHER, &publisher)?;
 
         self.repo
             .delete(publisher, *ctx.user_id())
@@ -246,15 +227,12 @@ mod tests {
 
         service.create(&ctx, dto).await.expect("Failed to create");
 
-        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        let mut all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
         let created = all.remove(0);
         assert_eq!(created.name, "Test Publisher");
 
-        let fetched = service
-            .get(&ctx, created.pub_id)
-            .await
-            .expect("Failed to get");
+        let fetched = service.get(created.pub_id).await.expect("Failed to get");
         assert_eq!(fetched.name, "Test Publisher");
         assert_eq!(fetched.pub_id, created.pub_id);
     }
@@ -283,13 +261,13 @@ mod tests {
             .await
             .expect("Failed to create 2");
 
-        let all = service.get_all(&ctx).await.expect("Failed to get all");
+        let all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 2);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_update(#[future] service: Service) {
+    async fn test_other_user_can_update_shared_publisher(#[future] service: Service) {
         let service = service.await;
         let ctx = UserContext::new(
             Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
@@ -300,7 +278,7 @@ mod tests {
         };
         service.create(&ctx, dto).await.expect("Failed to create");
 
-        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        let mut all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
         let created = all.remove(0);
 
@@ -308,21 +286,27 @@ mod tests {
             name: "Updated Name".to_string(),
         };
 
+        let other_user = UserContext::new(Uuid::new_v4(), vec![]);
         service
-            .update(&ctx, created.pub_id, update_dto)
+            .update(&other_user, created.pub_id, update_dto)
             .await
             .expect("Failed to update");
 
-        let fetched = service
-            .get(&ctx, created.pub_id)
-            .await
-            .expect("Failed to get");
+        let fetched = service.get(created.pub_id).await.expect("Failed to get");
         assert_eq!(fetched.name, "Updated Name");
+        let stored = service
+            .repo
+            .find_by_pub_id(created.pub_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.created_by(), ctx.user_id());
+        assert_eq!(stored.updated_by(), other_user.user_id());
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_delete(#[future] service: Service) {
+    async fn test_other_user_can_delete_shared_publisher(#[future] service: Service) {
         let service = service.await;
         let ctx = UserContext::new(
             Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
@@ -333,16 +317,17 @@ mod tests {
         };
         service.create(&ctx, dto).await.expect("Failed to create");
 
-        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        let mut all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
         let created = all.remove(0);
 
+        let other_user = UserContext::new(Uuid::new_v4(), vec![]);
         service
-            .delete(&ctx, created.pub_id)
+            .delete(&other_user, created.pub_id)
             .await
             .expect("Failed to delete");
 
-        let result = service.get(&ctx, created.pub_id).await;
+        let result = service.get(created.pub_id).await;
         assert!(result.is_err());
         match result {
             Err(UseCaseError::NotFound(_)) => (),

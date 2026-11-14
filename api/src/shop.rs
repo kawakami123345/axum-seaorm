@@ -7,8 +7,8 @@ use axum::{
 use std::sync::Arc;
 use usecase::shop::{CreateDto, ResponseDto, UpdateDto};
 
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 
 #[utoipa::path(
     post,
@@ -40,11 +40,8 @@ pub async fn create_shop(
         (status = 500, description = "Internal server error")
     )
 )]
-pub async fn get_all_shops(
-    State(state): State<Arc<AppState>>,
-    Extension(ctx): Extension<usecase::UserContext>,
-) -> impl IntoResponse {
-    match state.shop_usecase.get_all(&ctx).await {
+pub async fn get_all_shops(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.shop_usecase.get_all().await {
         Ok(shops) => (StatusCode::OK, Json(shops)).into_response(),
         Err(e) => AppError(e).into_response(),
     }
@@ -66,9 +63,8 @@ pub async fn get_all_shops(
 pub async fn get_shop(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
-    Extension(ctx): Extension<usecase::UserContext>,
 ) -> impl IntoResponse {
-    match state.shop_usecase.get(&ctx, pub_id).await {
+    match state.shop_usecase.get(pub_id).await {
         Ok(shop) => (StatusCode::OK, Json(shop)).into_response(),
         Err(e) => AppError(e).into_response(),
     }

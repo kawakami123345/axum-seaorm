@@ -17,11 +17,8 @@ use std::sync::Arc;
         (status = 200, description = "List all publishers", body = [usecase::publisher::ResponseDto])
     )
 )]
-pub async fn get_all(
-    State(state): State<Arc<AppState>>,
-    Extension(ctx): Extension<usecase::UserContext>,
-) -> impl IntoResponse {
-    match state.publisher_usecase.get_all(&ctx).await {
+pub async fn get_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.publisher_usecase.get_all().await {
         Ok(publishers) => (StatusCode::OK, Json(publishers)).into_response(),
         Err(e) => AppError(e).into_response(),
     }
@@ -43,9 +40,8 @@ pub async fn get_all(
 pub async fn get(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
-    Extension(ctx): Extension<usecase::UserContext>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.get(&ctx, pub_id).await {
+    match state.publisher_usecase.get(pub_id).await {
         Ok(publisher) => (StatusCode::OK, Json(publisher)).into_response(),
         Err(e) => AppError(e).into_response(),
     }

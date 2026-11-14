@@ -1,8 +1,7 @@
-use crate::{UserContext, cedar, error::UseCaseError};
+use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 pub struct Service {
     repo: Arc<dyn shop::Repository>,
@@ -13,32 +12,16 @@ impl Service {
         Self { repo }
     }
 
-    pub async fn get_all(&self, ctx: &UserContext) -> Result<Vec<ResponseDto>, UseCaseError> {
-        let shops = match cedar::authorize_list_query(
-            ctx,
-            cedar::ACTION_LIST_SHOPS,
-            cedar::ENTITY_TYPE_SHOP,
-        )? {
-            cedar::PolicyEvaluation::Allow => self.find_all().await?,
-            cedar::PolicyEvaluation::Deny => Vec::new(),
-        };
-
-        let dtos = shops.into_iter().map(ResponseDto::from).collect();
-        Ok(dtos)
-    }
-
-    async fn find_all(&self) -> Result<Vec<shop::Shop>, UseCaseError> {
-        self.repo.find_all().await.map_err(|e| {
+    pub async fn get_all(&self) -> Result<Vec<ResponseDto>, UseCaseError> {
+        let shops = self.repo.find_all().await.map_err(|e| {
             eprintln!("Database error in list shops: {:?}", e);
             UseCaseError::DatabaseError
-        })
+        })?;
+
+        Ok(shops.into_iter().map(ResponseDto::from).collect())
     }
 
-    pub async fn get(
-        &self,
-        ctx: &UserContext,
-        pub_id: uuid::Uuid,
-    ) -> Result<ResponseDto, UseCaseError> {
+    pub async fn get(&self, pub_id: uuid::Uuid) -> Result<ResponseDto, UseCaseError> {
         let shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -52,8 +35,6 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_shop_action(ctx, cedar::ACTION_GET_SHOP, &shop)?;
-
         Ok(shop.into())
     }
 
@@ -61,8 +42,6 @@ impl Service {
         let name = shop::vo::ShopName::new(dto.name)?;
 
         let shop = shop::Shop::new(uuid::Uuid::now_v7(), name, *ctx.user_id());
-
-        cedar::authorize_shop_action(ctx, cedar::ACTION_CREATE_SHOP, &shop)?;
 
         self.repo.create(shop).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -89,8 +68,6 @@ impl Service {
                 "Shop with pub_id = {} not found",
                 pub_id
             )))?;
-
-        cedar::authorize_shop_action(ctx, cedar::ACTION_UPDATE_SHOP, &shop)?;
 
         let name = shop::vo::ShopName::new(dto.name)?;
 
@@ -119,18 +96,10 @@ impl Service {
                 pub_id
             )))?;
 
-        cedar::authorize_shop_action(ctx, cedar::ACTION_DELETE_SHOP, &shop)?;
-
-        self.repo
-            .delete(
-                shop,
-                Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
-            )
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?;
+        self.repo.delete(shop, *ctx.user_id()).await.map_err(|e| {
+            eprintln!("Database error in create book (find publisher): {:?}", e);
+            UseCaseError::DatabaseError
+        })?;
 
         Ok(())
     }
@@ -202,11 +171,21 @@ mod tests {
             self.store.lock().unwrap().push(item.clone());
             Ok(())
         }
-        async fn update(&self, _item: shop::Shop) -> anyhow::Result<()> {
-            panic!("Not implemented")
+        async fn update(&self, item: shop::Shop) -> anyhow::Result<()> {
+            let mut store = self.store.lock().unwrap();
+            let stored = store
+                .iter_mut()
+                .find(|shop| shop.pub_id() == item.pub_id())
+                .unwrap();
+            *stored = item;
+            Ok(())
         }
-        async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
-            panic!("Not implemented")
+        async fn delete(&self, item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
+            self.store
+                .lock()
+                .unwrap()
+                .retain(|shop| shop.pub_id() != item.pub_id());
+            Ok(())
         }
     }
 
@@ -218,7 +197,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_and_get(service: Service) {
+    async fn test_shared_shop_can_be_updated_and_deleted_by_another_user(service: Service) {
         let ctx = UserContext::new(
             Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap(),
             vec![],
@@ -229,15 +208,42 @@ mod tests {
 
         service.create(&ctx, dto).await.expect("Failed to create");
 
-        let mut all = service.get_all(&ctx).await.expect("Failed to get all");
+        let mut all = service.get_all().await.expect("Failed to get all");
         assert_eq!(all.len(), 1);
         let created = all.remove(0);
         assert_eq!(created.name, "Test Shop");
 
-        let fetched = service
-            .get(&ctx, created.pub_id)
-            .await
-            .expect("Failed to get");
+        let fetched = service.get(created.pub_id).await.expect("Failed to get");
         assert_eq!(fetched.pub_id, created.pub_id);
+
+        let other_user = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .update(
+                &other_user,
+                created.pub_id,
+                UpdateDto {
+                    name: "Updated Shop".into(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service.get(created.pub_id).await.unwrap().name,
+            "Updated Shop"
+        );
+        let stored = service
+            .repo
+            .find_by_pub_id(created.pub_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.created_by(), ctx.user_id());
+        assert_eq!(stored.updated_by(), other_user.user_id());
+
+        service.delete(&other_user, created.pub_id).await.unwrap();
+        assert!(matches!(
+            service.get(created.pub_id).await,
+            Err(UseCaseError::NotFound(_))
+        ));
     }
 }

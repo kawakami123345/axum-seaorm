@@ -28,7 +28,6 @@
         "tamasfe.even-better-toml",
         "redhat.vscode-yaml",
         "hverlin.mise-vscode",
-        "cedar-policy.vscode-cedar",
         "esbenp.prettier-vscode",
         "ms-ossdata.vscode-pgsql"
       ],

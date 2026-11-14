@@ -1,4 +1,4 @@
-use crate::{UserContext, cedar, error::UseCaseError};
+use crate::{UserContext, error::UseCaseError};
 use chrono::Datelike;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,11 @@ impl Service {
         &self,
         ctx: &UserContext,
     ) -> Result<Vec<DashboardDto>, UseCaseError> {
-        let books = self.find_authorized_books(ctx).await?;
+        let books = self
+            .book_repo
+            .find_all(crate::book::list_filter(ctx))
+            .await
+            .map_err(|_| UseCaseError::DatabaseError)?;
 
         let mut applied_books: Vec<book::Book> = books
             .into_iter()
@@ -56,25 +60,6 @@ impl Service {
             .collect();
 
         Ok(summaries)
-    }
-
-    async fn find_authorized_books(
-        &self,
-        ctx: &UserContext,
-    ) -> Result<Vec<book::Book>, UseCaseError> {
-        match cedar::authorize_book_query(ctx, cedar::ACTION_GET_ANNUAL_SUMMARY)? {
-            cedar::PolicyEvaluation::Allow => self
-                .book_repo
-                .find_all_by_filter(book::ListFilter::All)
-                .await
-                .map_err(|_| UseCaseError::DatabaseError),
-            cedar::PolicyEvaluation::Deny => Ok(Vec::new()),
-            cedar::PolicyEvaluation::Filter(filter) => self
-                .book_repo
-                .find_all_by_filter(filter)
-                .await
-                .map_err(|_| UseCaseError::DatabaseError),
-        }
     }
 }
 
@@ -118,8 +103,15 @@ mod tests {
 
     #[async_trait]
     impl book::Repository for FakeBookRepository {
-        async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
-            Ok(self.store.lock().unwrap().clone())
+        async fn find_all(&self, filter: book::ListFilter) -> anyhow::Result<Vec<book::Book>> {
+            Ok(self
+                .store
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|book| filter.matches(book))
+                .cloned()
+                .collect())
         }
 
         async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<book::Book>> {
@@ -180,12 +172,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn annual_summary_filters_books_with_cedar_rls() {
+    async fn annual_summary_filters_books_by_owner_unless_admin() {
         let repo = Arc::new(FakeBookRepository::new());
         let user_id = Uuid::from_str("11111111-1234-5678-90ab-cdef12345678").unwrap();
         let other_user_id = Uuid::from_str("22222222-1234-5678-90ab-cdef12345678").unwrap();
         repo.add(applied_book(user_id, 1000, 2024));
         repo.add(applied_book(other_user_id, 2000, 2024));
+        repo.add(applied_book(other_user_id, 500, 2023));
+        let mut unapplied = applied_book(user_id, 900, 2025);
+        unapplied.change_applied_at(None, user_id).unwrap();
+        repo.add(unapplied);
 
         let service = Service::new(repo);
         let user_ctx = UserContext::new(user_id, vec![]);
@@ -194,6 +190,7 @@ mod tests {
             .await
             .expect("summary should be available");
         assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].year, 2024);
         assert_eq!(summaries[0].count, 1);
         assert_eq!(summaries[0].total_amount, 1000);
 
@@ -202,8 +199,21 @@ mod tests {
             .get_annual_summary(&admin_ctx)
             .await
             .expect("admin summary should be available");
-        assert_eq!(summaries.len(), 1);
-        assert_eq!(summaries[0].count, 2);
-        assert_eq!(summaries[0].total_amount, 3000);
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].year, 2023);
+        assert_eq!(summaries[0].count, 1);
+        assert_eq!(summaries[0].total_amount, 500);
+        assert_eq!(summaries[1].year, 2024);
+        assert_eq!(summaries[1].count, 2);
+        assert_eq!(summaries[1].total_amount, 3000);
+
+        let stranger = UserContext::new(Uuid::new_v4(), vec![]);
+        assert!(
+            service
+                .get_annual_summary(&stranger)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 }

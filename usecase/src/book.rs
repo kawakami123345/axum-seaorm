@@ -1,8 +1,16 @@
-use crate::{UserContext, cedar, error::UseCaseError};
+use crate::{UserContext, error::UseCaseError};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
+
+pub(crate) fn list_filter(ctx: &UserContext) -> book::ListFilter {
+    if ctx.is_admin() {
+        book::ListFilter::All
+    } else {
+        book::ListFilter::OwnedBy(*ctx.user_id())
+    }
+}
 
 pub struct Service {
     repo: Arc<dyn book::Repository>,
@@ -51,23 +59,10 @@ impl Service {
         &self,
         ctx: &UserContext,
     ) -> Result<Vec<book::Book>, UseCaseError> {
-        match cedar::authorize_book_query(ctx, cedar::ACTION_LIST_BOOKS)? {
-            cedar::PolicyEvaluation::Allow => self
-                .repo
-                .find_all_by_filter(book::ListFilter::All)
-                .await
-                .map_err(|e| {
-                    eprintln!("Database error in list books: {:?}", e);
-                    UseCaseError::DatabaseError
-                }),
-            cedar::PolicyEvaluation::Deny => Ok(Vec::new()),
-            cedar::PolicyEvaluation::Filter(filter) => {
-                self.repo.find_all_by_filter(filter).await.map_err(|e| {
-                    eprintln!("Database error in list books: {:?}", e);
-                    UseCaseError::DatabaseError
-                })
-            }
-        }
+        self.repo.find_all(list_filter(ctx)).await.map_err(|e| {
+            eprintln!("Database error in list books: {:?}", e);
+            UseCaseError::DatabaseError
+        })
     }
 
     pub async fn get(
@@ -75,22 +70,23 @@ impl Service {
         ctx: &UserContext,
         pub_id: uuid::Uuid,
     ) -> Result<ResponseDto, UseCaseError> {
-        let book = self
-            .repo
+        Ok(self.find_book(ctx, pub_id).await?.into())
+    }
+
+    async fn find_book(
+        &self,
+        ctx: &UserContext,
+        pub_id: uuid::Uuid,
+    ) -> Result<book::Book, UseCaseError> {
+        self.repo
             .find_by_pub_id(pub_id)
             .await
             .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
+                eprintln!("Database error in find book: {:?}", e);
                 UseCaseError::DatabaseError
             })?
-            .ok_or(UseCaseError::NotFound("Book not found".into()))?;
-
-        cedar::authorize_book_action(ctx, cedar::ACTION_GET_BOOK, &book).map_err(|e| match e {
-            UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-            _ => e,
-        })?;
-
-        Ok(book.into())
+            .filter(|book| list_filter(ctx).matches(book))
+            .ok_or(UseCaseError::NotFound("Book not found".into()))
     }
 
     pub async fn create(&self, ctx: &UserContext, dto: CreateDto) -> Result<(), UseCaseError> {
@@ -140,8 +136,6 @@ impl Service {
             ctx.user_id,
         );
 
-        cedar::authorize_book_action(ctx, cedar::ACTION_CREATE_BOOK, &book)?;
-
         self.repo.create(book).await.map_err(|e| {
             eprintln!("Database error in create book: {:?}", e);
             UseCaseError::DatabaseError
@@ -164,22 +158,7 @@ impl Service {
             _ => book::vo::BookFormat::Real,
         };
 
-        let mut book = self
-            .repo
-            .find_by_pub_id(pub_id)
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
-            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
-
-        cedar::authorize_book_action(ctx, cedar::ACTION_UPDATE_BOOK, &book).map_err(
-            |e| match e {
-                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-                _ => e,
-            },
-        )?;
+        let mut book = self.find_book(ctx, pub_id).await?;
 
         // Resolve Publisher
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
@@ -227,22 +206,7 @@ impl Service {
     }
 
     pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
-        let book = self
-            .repo
-            .find_by_pub_id(pub_id)
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
-            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
-
-        cedar::authorize_book_action(ctx, cedar::ACTION_DELETE_BOOK, &book).map_err(
-            |e| match e {
-                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-                _ => e,
-            },
-        )?;
+        let book = self.find_book(ctx, pub_id).await?;
 
         self.repo.delete(book, ctx.user_id).await.map_err(|e| {
             eprintln!("Database error in create book (find publisher): {:?}", e);
@@ -256,22 +220,7 @@ impl Service {
         pub_id: uuid::Uuid,
         dto: ChangeAppliedAtDto,
     ) -> Result<ResponseDto, UseCaseError> {
-        let mut book = self
-            .repo
-            .find_by_pub_id(pub_id)
-            .await
-            .map_err(|e| {
-                eprintln!("Database error in create book (find publisher): {:?}", e);
-                UseCaseError::DatabaseError
-            })?
-            .ok_or(UseCaseError::NotFound("Book not found".to_string()))?;
-
-        cedar::authorize_book_action(ctx, cedar::ACTION_CHANGE_BOOK_APPLIED_AT, &book).map_err(
-            |e| match e {
-                UseCaseError::Forbidden(_) => UseCaseError::NotFound("Book not found".into()),
-                _ => e,
-            },
-        )?;
+        let mut book = self.find_book(ctx, pub_id).await?;
 
         book.change_applied_at(dto.applied_at, ctx.user_id)
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
@@ -370,6 +319,7 @@ pub struct BookShopDto {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use chrono::TimeZone;
     use rstest::*;
     use std::{str::FromStr, sync::Mutex};
     use uuid::Uuid;
@@ -388,9 +338,13 @@ mod tests {
 
     #[async_trait]
     impl book::Repository for FakeRepository {
-        async fn find_all(&self) -> anyhow::Result<Vec<book::Book>> {
+        async fn find_all(&self, filter: book::ListFilter) -> anyhow::Result<Vec<book::Book>> {
             let store = self.store.lock().unwrap();
-            Ok(store.clone())
+            Ok(store
+                .iter()
+                .filter(|book| filter.matches(book))
+                .cloned()
+                .collect())
         }
 
         async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<book::Book>> {
@@ -646,7 +600,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_get_all_filters_by_cedar_pst_authorization(
+    async fn test_get_all_filters_by_owner_unless_admin(
         #[future] service: (
             Service,
             Arc<FakePublisherRepository>,
@@ -701,6 +655,176 @@ mod tests {
             .await
             .expect("Failed to get all as admin");
         assert_eq!(admin_books.len(), 2);
+
+        let other_books = service.get_all(&other_user_ctx).await.unwrap();
+        assert_eq!(other_books.len(), 1);
+        assert_eq!(other_books[0].title, "Other User Book");
+
+        let stranger = UserContext::new(Uuid::new_v4(), vec!["editor".into()]);
+        assert!(service.get_all(&stranger).await.unwrap().is_empty());
+    }
+
+    #[rstest]
+    #[case::owner(true, vec![], true)]
+    #[case::other_user(false, vec![], false)]
+    #[case::other_role(false, vec!["editor".into()], false)]
+    #[case::admin(false, vec!["admin".into()], true)]
+    #[tokio::test]
+    async fn book_operations_require_owner_or_admin(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+        #[case] owns_book: bool,
+        #[case] roles: Vec<String>,
+        #[case] allowed: bool,
+    ) {
+        let (service, pub_repo, _) = service.await;
+        let publisher_id = Uuid::new_v4();
+        pub_repo.add(create_dummy_publisher(publisher_id));
+        let owner = UserContext::new(Uuid::new_v4(), vec![]);
+        let actor = UserContext::new(
+            if owns_book {
+                *owner.user_id()
+            } else {
+                Uuid::new_v4()
+            },
+            roles,
+        );
+        service
+            .create(
+                &owner,
+                CreateDto {
+                    title: "Original".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 100,
+                },
+            )
+            .await
+            .unwrap();
+        let pub_id = service.get_all(&owner).await.unwrap()[0].pub_id;
+
+        let fetched = service.get(&actor, pub_id).await;
+        let updated = service
+            .update(
+                &actor,
+                pub_id,
+                UpdateDto {
+                    title: "Updated".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 200,
+                },
+            )
+            .await;
+        let applied_at = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let applied = service
+            .change_applied_at(
+                &actor,
+                pub_id,
+                ChangeAppliedAtDto {
+                    applied_at: Some(applied_at),
+                },
+            )
+            .await;
+
+        let stored = service.repo.find_by_pub_id(pub_id).await.unwrap().unwrap();
+        assert_eq!(stored.user_id(), owner.user_id());
+        let deleted = service.delete(&actor, pub_id).await;
+
+        if allowed {
+            assert_eq!(fetched.unwrap().title, "Original");
+            updated.unwrap();
+            let applied = applied.unwrap();
+            assert_eq!(applied.title, "Updated");
+            assert_eq!(applied.applied_at, Some(applied_at));
+            assert_eq!(stored.updated_by(), actor.user_id());
+            deleted.unwrap();
+            assert!(service.repo.find_by_pub_id(pub_id).await.unwrap().is_none());
+        } else {
+            assert!(matches!(fetched, Err(UseCaseError::NotFound(_))));
+            assert!(matches!(updated, Err(UseCaseError::NotFound(_))));
+            assert!(matches!(applied, Err(UseCaseError::NotFound(_))));
+            assert!(matches!(deleted, Err(UseCaseError::NotFound(_))));
+            let unchanged = service.get(&owner, pub_id).await.unwrap();
+            assert_eq!(unchanged.title, "Original");
+            assert_eq!(unchanged.price, 100);
+            assert!(unchanged.applied_at.is_none());
+            assert_eq!(stored.updated_by(), owner.user_id());
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn year_applied_books_filter_by_owner_and_year(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, _, _) = service.await;
+        let user_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        for (owner_id, year) in [
+            (user_id, Some(2024)),
+            (other_user_id, Some(2024)),
+            (user_id, Some(2023)),
+            (user_id, None),
+        ] {
+            let mut book = book::Book::new(
+                Uuid::new_v4(),
+                book::vo::BookTitle::new("Book".into()).unwrap(),
+                book::vo::BookAuthor::new("Author".into()).unwrap(),
+                create_dummy_publisher(Uuid::new_v4()),
+                None,
+                book::vo::BookFormat::Real,
+                book::vo::BookPrice::new(100).unwrap(),
+                owner_id,
+                owner_id,
+            );
+            if let Some(year) = year {
+                book.change_applied_at(
+                    Some(chrono::Utc.with_ymd_and_hms(year, 1, 1, 0, 0, 0).unwrap()),
+                    owner_id,
+                )
+                .unwrap();
+            }
+            service.repo.create(book).await.unwrap();
+        }
+
+        let user = UserContext::new(user_id, vec![]);
+        assert_eq!(
+            service
+                .get_year_applied_books(&user, 2024)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            service
+                .get_year_applied_books(&user, 2022)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        let admin = UserContext::new(user_id, vec!["admin".into()]);
+        assert_eq!(
+            service
+                .get_year_applied_books(&admin, 2024)
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[rstest]
