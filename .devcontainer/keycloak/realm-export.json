@@ -51,6 +51,9 @@
   "users": [
     {
       "username": "admin",
+      "firstName": "Development",
+      "lastName": "Admin",
+      "email": "admin@example.test",
       "enabled": true,
       "emailVerified": true,
       "credentials": [

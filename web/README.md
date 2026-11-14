@@ -1,25 +1,16 @@
 # RustWeb Frontend
 
-This is a premium React dashboard built with Vite and TypeScript.
+React・TypeScript・Viteによるフロントエンドです。
+開発環境の構築は[ルートのREADME](../README.md)を参照してください。
 
-## Getting Started
+Dev Container内で、リポジトリのルートから実行します。
 
-1.  **Start the Backend**:
-    ```bash
-    cargo run
-    ```
-    (Ensure the backend is running on `http://localhost:3000`)
+```bash
+mise run dev:frontend
+```
 
-2.  **Start the Frontend**:
-    ```bash
-    cd frontend
-    npm install
-    npm run dev
-    ```
+APIも同時に起動する場合は`mise run dev`を使います。
+`/api`へのリクエストはViteからAxumへ転送されます。
 
-## Features
-
-- **Glassmorphism**: Modern UI with backdrop blurs and subtle borders.
-- **Dynamic Gradients**: Vibrant color schemes tailored for a premium feel.
-- **Micro-animations**: Smooth transitions and entry animations.
-- **API Proxy**: Pre-configured to forward requests to the Axum backend.
+依存を変更する場合は`web`で`bun add` / `bun remove`を使い、`bun.lock`を更新します。
+OpenAPIクライアントの再生成は`web`で`bun run generate-api`を実行します。

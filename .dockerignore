@@ -1,7 +1,0 @@
-.git
-.env
-target
-web/node_modules
-web/dist
-node_modules
-*.log

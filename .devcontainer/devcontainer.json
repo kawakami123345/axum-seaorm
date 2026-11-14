@@ -1,0 +1,25 @@
+{
+  "name": "Development Environment",
+  "dockerComposeFile": "compose.yaml",
+  "service": "workspace",
+  "runServices": ["workspace", "postgres", "keycloak"],
+  "workspaceFolder": "/workspaces/project",
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "DATABASE_URL": "postgres://user:password@postgres:5432/rust_web_db",
+    "APP_URL": "http://localhost:3000",
+    "OIDC_CLIENT_ID": "rust_web",
+    "OIDC_CLIENT_SECRET": "supersecret123",
+    "OIDC_ISSUER_URL": "http://localhost:8080/realms/rust-web-realm",
+    "OIDC_LOGOUT_URL": "http://localhost:8080/realms/rust-web-realm/protocol/openid-connect/logout"
+  },
+  "features": {
+    "ghcr.io/devcontainers-extra/features/mise:1": {},
+    "ghcr.io/devcontainers-extra/features/apt-packages:1": {
+      "packages": "pkg-config"
+    }
+  },
+  "forwardPorts": [3000, 5173, 8080, "postgres:5432"],
+  "postCreateCommand": "mise trust && mise install",
+  "shutdownAction": "stopCompose"
+}

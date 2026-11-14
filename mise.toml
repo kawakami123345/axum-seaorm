@@ -1,0 +1,33 @@
+[tools]
+rust = "latest"
+bun = "latest"
+node = "26"
+
+[tasks.setup]
+description = "Install frontend dependencies from the Bun lockfile"
+dir = "{{config_root}}/web"
+run = "bun install --frozen-lockfile"
+
+[tasks.dev]
+description = "Start the backend and frontend together (Ctrl+C stops both)"
+depends = ["dev:backend", "dev:frontend"]
+
+[tasks."dev:backend"]
+description = "Start the API and apply database migrations"
+dir = "{{config_root}}"
+run = "cargo run --locked"
+
+[tasks."dev:frontend"]
+description = "Start Vite on port 5173"
+dir = "{{config_root}}/web"
+run = "bun run dev --host 0.0.0.0 --port 5173 --strictPort"
+
+[tasks.check]
+description = "Check Rust and build the frontend"
+dir = "{{config_root}}"
+run = ["cargo check --workspace --locked", "bun run --cwd web build"]
+
+[tasks.test]
+description = "Run Rust workspace tests"
+dir = "{{config_root}}"
+run = "cargo test --workspace --locked"
