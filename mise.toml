@@ -2,6 +2,7 @@
 rust = "latest"
 bun = "latest"
 node = "26"
+codex = "latest"
 
 [tasks.setup]
 description = "Install frontend dependencies from the Bun lockfile"
