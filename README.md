@@ -86,6 +86,8 @@ mise run setup         # bun.lockから依存を再インストール
 mise run orval         # OpenAPIからAPIクライアントを生成
 mise run check         # Rustのチェックとフロントエンドのビルド
 mise run test          # Rustワークスペースのテスト
+mise run test:frontend # フロントエンドの単体テスト
+mise run test:browser  # Chromiumで画面操作を検証
 ```
 
 `mise.toml`変更後は`mise install`を実行します。Dev Containerの設定変更後は

@@ -1,42 +1,69 @@
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "処理に失敗しました。";
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+    if (
+      body &&
+      typeof body === "object" &&
+      "error" in body &&
+      typeof body.error === "string"
+    ) {
+      return body.error;
+    }
+  } catch {
+    // Non-JSON errors can be returned by the authentication middleware or proxy.
+  }
+  return `通信に失敗しました (HTTP ${response.status})`;
+}
+
+const mutationMethods = new Set(["POST", "PUT", "DELETE", "PATCH"]);
+
 export const customFetch = async <T>(
-    url: string,
-    options: RequestInit,
+  url: string,
+  options: RequestInit = {},
 ): Promise<T> => {
-    // クッキーからCSRFトークンを取得
-    const csrfToken = document.cookie
-        .split('; ')
-        .find((row) => row.startsWith('csrf_token='))
-        ?.split('=')[1];
+  const csrfToken = document.cookie
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith("csrf_token="))
+    ?.slice("csrf_token=".length);
 
-    const headers = new Headers(options.headers);
-    if (csrfToken && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method || 'GET')) {
-        headers.append('X-CSRF-Token', csrfToken);
-    }
+  const headers = new Headers(options.headers);
+  if (
+    csrfToken &&
+    mutationMethods.has((options.method ?? "GET").toUpperCase())
+  ) {
+    headers.set("X-CSRF-Token", csrfToken);
+  }
 
-    const response = await fetch('/api' + url, {
-        ...options,
-        headers,
-    });
+  const response = await fetch(`/api${url}`, { ...options, headers });
+  if (!response.ok) {
+    const error = new ApiError(
+      await readErrorMessage(response),
+      response.status,
+    );
+    if (response.status === 401) window.location.assign("/login");
+    throw error;
+  }
 
-    if (!response.ok) {
-        console.error(`Fetch error: ${response.status} ${response.statusText} for ${url}`);
-        if (response.status === 401) {
-            console.log('401 Unauthorized detected, redirecting to /login');
-            window.location.href = '/login';
-            // 遷移中のため、それ以上のエラーハンドリングを抑制するために未解決のPromiseを返すか、
-            // 直ちにthrowする。ここではコンポーネントの状態更新を避ける意図。
-            return new Promise(() => { });
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = response.status === 204 ? null : await response.json();
-
-    return {
-        data,
-        status: response.status,
-        headers: response.headers,
-    } as T;
+  return {
+    data: response.status === 204 ? undefined : await response.json(),
+    status: response.status,
+    headers: response.headers,
+  } as T;
 };
 
 export default customFetch;

@@ -39,6 +39,16 @@ description = "Run Rust workspace tests"
 dir = "{{config_root}}"
 run = "cargo test --workspace --locked"
 
+[tasks."test:frontend"]
+description = "Run frontend unit tests"
+dir = "{{config_root}}/web"
+run = "bun run test"
+
+[tasks."test:browser"]
+description = "Run frontend browser tests with mocked API responses"
+dir = "{{config_root}}/web"
+run = "bun run test:browser"
+
 [tasks.codex-start]
 description = "codex remote-control start"
 dir = "{{config_root}}"
