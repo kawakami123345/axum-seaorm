@@ -32,3 +32,14 @@ run = ["cargo check --workspace --locked", "bun run --cwd web build"]
 description = "Run Rust workspace tests"
 dir = "{{config_root}}"
 run = "cargo test --workspace --locked"
+
+[tasks.codex-start]
+description = "codex remote-control start"
+dir = "{{config_root}}"
+run = "codex remote-control start"
+
+[tasks.codex-pair]
+description = "codex remote-control start"
+dir = "{{config_root}}"
+depends = ["codex-start"]
+run = "codex remote-control pair"

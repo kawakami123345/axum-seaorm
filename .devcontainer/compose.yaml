@@ -8,6 +8,9 @@ services:
       - ..:/workspaces/project
     # Keep the browser and API on the same localhost OIDC issuer URL.
     network_mode: service:keycloak
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,7 +43,13 @@ services:
       - keycloak_data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import:ro
     healthcheck:
-      test: ["CMD", "bash", "-ec", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      test:
+        [
+          "CMD",
+          "bash",
+          "-ec",
+          "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000",
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
