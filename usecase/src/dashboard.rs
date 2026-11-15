@@ -4,12 +4,12 @@ use std::{collections::BTreeMap, sync::Arc};
 use time::UtcOffset;
 use utoipa::ToSchema;
 
-const ANNUAL_BUDGET: i32 = 20_000;
+const ANNUAL_BUDGET: i64 = 20_000;
 
 #[derive(Default)]
 struct AnnualTotals {
-    count: i32,
-    total_amount: i32,
+    count: i64,
+    total_amount: i64,
 }
 
 pub struct Service {
@@ -38,7 +38,7 @@ impl Service {
                     .entry(applied_at.to_offset(UtcOffset::UTC).year())
                     .or_default();
                 totals.count += 1;
-                totals.total_amount += book.price();
+                totals.total_amount += i64::from(book.price());
             }
         }
 
@@ -60,10 +60,10 @@ impl Service {
 #[schema(as = DashboardDto)]
 pub struct DashboardDto {
     pub year: i32,
-    pub limit: i32,
-    pub total_amount: i32,
-    pub balance: i32,
-    pub count: i32,
+    pub limit: i64,
+    pub total_amount: i64,
+    pub balance: i64,
+    pub count: i64,
     pub average: f64,
 }
 
@@ -121,12 +121,12 @@ mod tests {
             Ok(())
         }
 
-        async fn update(&self, item: book::Book) -> anyhow::Result<()> {
+        async fn update(&self, item: book::Book) -> anyhow::Result<bool> {
             let mut store = self.store.lock().unwrap();
             if let Some(index) = store.iter().position(|book| book.pub_id() == item.pub_id()) {
                 store[index] = item;
             }
-            Ok(())
+            Ok(true)
         }
 
         async fn delete(&self, item: book::Book, _deleted_by: Uuid) -> anyhow::Result<()> {
@@ -195,6 +195,23 @@ mod tests {
         assert_eq!(over_budget.total_amount, 25_001);
         assert_eq!(over_budget.balance, -5_001);
         assert_eq!(over_budget.average, 12_500.5);
+    }
+
+    #[tokio::test]
+    async fn annual_summary_supports_totals_above_the_maximum_book_price() {
+        let repo = Arc::new(FakeBookRepository::new());
+        let user_id = Uuid::new_v4();
+        repo.add(applied_book(user_id, i32::MAX, 2026));
+        repo.add(applied_book(user_id, i32::MAX, 2026));
+
+        let summaries = Service::new(repo)
+            .get_annual_summary(&UserContext::new(user_id, vec![]))
+            .await
+            .unwrap();
+
+        assert_eq!(summaries[0].total_amount, 4_294_967_294);
+        assert_eq!(summaries[0].balance, -4_294_947_294);
+        assert_eq!(summaries[0].average, f64::from(i32::MAX));
     }
 
     #[tokio::test]

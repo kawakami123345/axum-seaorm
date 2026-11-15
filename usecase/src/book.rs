@@ -157,10 +157,7 @@ impl Service {
         )
         .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo
-            .update(book)
-            .await
-            .map_err(|e| UseCaseError::database("update book", e))
+        self.save_book(book, "update book").await
     }
 
     pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
@@ -184,12 +181,23 @@ impl Service {
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
         let response = ResponseDto::from(&book);
-        self.repo
-            .update(book)
-            .await
-            .map_err(|e| UseCaseError::database("change book applied date", e))?;
+        self.save_book(book, "change book applied date").await?;
 
         Ok(response)
+    }
+
+    async fn save_book(&self, book: book::Book, operation: &str) -> Result<(), UseCaseError> {
+        let updated = self
+            .repo
+            .update(book)
+            .await
+            .map_err(|e| UseCaseError::database(operation, e))?;
+        if !updated {
+            return Err(UseCaseError::Conflict(
+                "別の操作で書籍が更新されました。再読み込みしてからやり直してください。".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -337,19 +345,40 @@ mod tests {
                 *item.created_by(),
                 *item.updated_by(),
                 *item.user_id(),
+                item.revision(),
             );
 
             store.push(new_book);
             Ok(())
         }
 
-        async fn update(&self, item: book::Book) -> anyhow::Result<()> {
+        async fn update(&self, item: book::Book) -> anyhow::Result<bool> {
             let mut store = self.store.lock().unwrap();
             if let Some(index) = store.iter().position(|b| b.id() == item.id()) {
+                if store[index].revision() != item.revision() {
+                    return Ok(false);
+                }
+                let item = book::Book::reconstruct(
+                    item.id(),
+                    item.pub_id(),
+                    book::vo::BookTitle::new(item.title().to_string()).unwrap(),
+                    book::vo::BookAuthor::new(item.author().to_string()).unwrap(),
+                    item.publisher().clone(),
+                    item.shop().clone(),
+                    item.applied_at(),
+                    item.format(),
+                    book::vo::BookPrice::new(item.price()).unwrap(),
+                    item.created_at(),
+                    item.updated_at(),
+                    *item.created_by(),
+                    *item.updated_by(),
+                    *item.user_id(),
+                    item.revision() + 1,
+                );
                 store[index] = item;
-                Ok(())
+                Ok(true)
             } else {
-                Err(anyhow::anyhow!("Book not found"))
+                Ok(false)
             }
         }
 
@@ -531,6 +560,57 @@ mod tests {
             .expect("Failed to get book");
         assert_eq!(fetched.pub_id, created.pub_id);
         assert_eq!(fetched.shop.unwrap().name, "Test Shop");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn a_stale_save_returns_a_conflict_without_undoing_the_application(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, publishers, _) = service.await;
+        let publisher_id = Uuid::new_v4();
+        publishers.add(create_dummy_publisher(publisher_id));
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .create(
+                &ctx,
+                CreateDto {
+                    title: "Book".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 1000,
+                },
+            )
+            .await
+            .unwrap();
+        let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
+        let stale = service.find_book(&ctx, pub_id).await.unwrap();
+        let applied_at = time::OffsetDateTime::now_utc();
+        service
+            .change_applied_at(
+                &ctx,
+                pub_id,
+                ChangeAppliedAtDto {
+                    applied_at: Some(applied_at),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            service.save_book(stale, "save stale book").await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        assert_eq!(
+            service.get(&ctx, pub_id).await.unwrap().applied_at,
+            Some(applied_at)
+        );
     }
 
     #[rstest]

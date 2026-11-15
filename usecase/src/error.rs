@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum UseCaseError {
     #[error("Entity not found")]
     NotFound(String),
+    #[error("Write conflict: {0}")]
+    Conflict(String),
     #[error("Internal server error")]
     InternalServerError,
     #[error("Database execution failed")]

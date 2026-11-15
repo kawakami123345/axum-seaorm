@@ -28,6 +28,8 @@ pub struct Model {
     pub created_by: Uuid,
     pub updated_by: Uuid,
     pub user_id: Uuid,
+    #[sea_orm(default_value = 0)]
+    pub revision: i64,
 
     #[sea_orm(belongs_to, from = "publisher_id", to = "id")]
     pub publisher: HasOne<super::publisher::Entity>,
@@ -102,6 +104,7 @@ impl ModelEx {
             self.created_by,
             self.updated_by,
             self.user_id,
+            self.revision,
         ))
     }
 }
@@ -164,6 +167,7 @@ impl book::Repository for SqlRepository {
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
             .set_user_id(*item.user_id())
+            .set_revision(item.revision())
             .set_publisher_id(item.publisher().id())
             .set_shop_id(item.shop().clone().map(|s| s.id()))
             .insert(&txn)
@@ -173,29 +177,30 @@ impl book::Repository for SqlRepository {
         Ok(())
     }
 
-    async fn update(&self, item: book::Book) -> anyhow::Result<()> {
+    async fn update(&self, item: book::Book) -> anyhow::Result<bool> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        ActiveModel::builder()
-            .set_id(item.id())
-            .set_pub_id(item.pub_id())
+        let changes = ActiveModel::builder()
             .set_title(item.title().to_string())
             .set_author(item.author().to_string())
             .set_price(item.price())
             .set_applied_at(item.applied_at())
             .set_format(item.format().to_string())
-            .set_created_at(item.created_at())
             .set_updated_at(item.updated_at())
-            .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
-            .set_user_id(*item.user_id())
             .set_publisher_id(item.publisher().id())
             .set_shop_id(item.shop().clone().map(|s| s.id()))
-            .update(&txn)
+            .set_revision(item.revision() + 1);
+
+        let result = Entity::update_many()
+            .set(changes)
+            .filter(Column::Id.eq(item.id()))
+            .filter(Column::Revision.eq(item.revision()))
+            .exec(&txn)
             .await?;
 
         txn.commit().await?;
-        Ok(())
+        Ok(result.rows_affected == 1)
     }
 
     async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {

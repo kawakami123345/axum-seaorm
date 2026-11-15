@@ -1,6 +1,88 @@
 import { expect, test, type Dialog } from "@playwright/test";
 import { mockApi } from "./api-fixture";
 
+test("creates the first publisher and book through mobile navigation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const state = await mockApi(page);
+  state.publishers = [];
+  state.books = [];
+  await page.goto("/library");
+  await page.getByRole("link", { name: "出版社", exact: true }).click();
+  await page.getByRole("button", { name: "出版社を追加" }).click();
+  const publisherDialog = page.getByRole("dialog");
+  await publisherDialog
+    .getByLabel("出版社名", { exact: true })
+    .fill("First Publisher");
+  await publisherDialog.getByRole("button", { name: "保存する" }).click();
+  await expect(publisherDialog).not.toBeVisible();
+
+  await page.getByRole("link", { name: "ライブラリ", exact: true }).click();
+  await page.getByRole("button", { name: "書籍を追加" }).click();
+  const bookDialog = page.getByRole("dialog");
+  await bookDialog.getByLabel("タイトル", { exact: true }).fill("First Book");
+  await bookDialog.getByLabel("著者", { exact: true }).fill("First Author");
+  await bookDialog.getByLabel("価格", { exact: true }).fill("1000");
+  await bookDialog
+    .getByLabel("出版社", { exact: true })
+    .selectOption({ label: "First Publisher" });
+  await bookDialog.getByRole("button", { name: "保存する" }).click();
+  await expect(bookDialog).not.toBeVisible();
+  await expect(page.getByText("First Book", { exact: true })).toBeVisible();
+  expect(state.bookWrites).toHaveLength(1);
+});
+
+test("shows summary loading and failure states and retries without showing false zeros", async ({
+  page,
+}) => {
+  const state = await mockApi(page);
+  state.books[0]!.applied_at = "2026-01-01T00:00:00Z";
+  state.failSummary = true;
+  let releaseSummary = () => {};
+  state.holdSummary = new Promise<void>((resolve) => {
+    releaseSummary = resolve;
+  });
+  await page.goto("/library");
+  const summary = page.getByRole("complementary", { name: "予算概要" });
+  await expect(summary.getByRole("status")).toContainText("読み込み中");
+  await expect(summary.getByText("￥0", { exact: true })).not.toBeVisible();
+
+  releaseSummary();
+  await expect(summary.getByRole("alert")).toContainText(
+    "取得できませんでした",
+    { timeout: 10_000 },
+  );
+  await expect(
+    summary.getByText("データがありません", { exact: true }),
+  ).not.toBeVisible();
+  await expect(summary.getByText("￥0", { exact: true })).not.toBeVisible();
+  state.failSummary = false;
+  await summary.getByRole("button", { name: "再試行" }).click();
+  await expect(summary.getByRole("alert")).not.toBeVisible();
+  await expect(summary).toContainText("1冊");
+  await expect(summary.getByText("￥1,000", { exact: true })).toBeVisible();
+  await expect(summary).toContainText("￥1,000 使用済");
+});
+
+test.describe("UTC expense dates", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+
+  test("keeps the date and year in a timezone west of UTC", async ({
+    page,
+  }) => {
+    const state = await mockApi(page);
+    state.books[0]!.applied_at = "2026-01-01T00:00:00Z";
+    await page.goto("/library");
+    const row = page.getByRole("row").filter({ hasText: "Original Book" });
+    await expect(row).toContainText("2026/1/1");
+    await expect(row).not.toContainText("2025/12/31");
+    await expect(
+      page.getByRole("complementary", { name: "予算概要" }),
+    ).toContainText("2026年度");
+  });
+});
+
 test.beforeEach(async ({ context, baseURL }) => {
   if (!baseURL) throw new Error("Browser tests require a base URL");
   await context.addCookies([

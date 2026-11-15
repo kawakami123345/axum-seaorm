@@ -94,6 +94,7 @@ impl shop::Repository for SqlRepository {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         ActiveModel::builder()
+            .set_id(item.id())
             .set_pub_id(item.pub_id())
             .set_name(item.name().to_string())
             .set_created_at(item.created_at())
@@ -109,7 +110,7 @@ impl shop::Repository for SqlRepository {
 
     async fn delete(&self, item: shop::Shop, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
         let txn = self.db.begin_with_user(&deleted_by).await?;
-        Entity::delete_by_id(item.id()).exec(&self.db).await?;
+        Entity::delete_by_id(item.id()).exec(&txn).await?;
         txn.commit().await?;
         Ok(())
     }

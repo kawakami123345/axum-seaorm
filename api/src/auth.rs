@@ -45,7 +45,15 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{error, info};
 
-use crate::AppState;
+use crate::error::AppError;
+
+#[derive(Clone)]
+pub struct AuthState {
+    pub sessions: Arc<usecase::session::Service>,
+    pub oidc_client: AppClient,
+    pub cookie_key: tower_cookies::Key,
+    pub http_client: reqwest::Client,
+}
 
 const NONCE_COOKIE_NAME: &str = "auth_nonce";
 const STATE_COOKIE_NAME: &str = "auth_state";
@@ -53,7 +61,7 @@ const SESSION_COOKIE_NAME: &str = "session";
 const CSRF_COOKIE_NAME: &str = "csrf_token";
 const CSRF_HEADER_NAME: &str = "X-CSRF-Token";
 
-pub fn auth_router() -> Router<Arc<AppState>> {
+pub fn auth_router() -> Router<AuthState> {
     Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))
@@ -93,22 +101,41 @@ struct RoleClaims {
 
 /// 認証ミドルウェア: セッションCookieがない場合は 401 Unauthorized を返す
 pub async fn require_auth(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AuthState>,
     cookies: Cookies,
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    // セッションCookieが存在するか確認
-    if let Some(cookie) = cookies.private(&state.cookie_key).get(SESSION_COOKIE_NAME)
-        && let Ok(session) = serde_json::from_str::<usecase::UserContext>(cookie.value())
-    {
-        request.extensions_mut().insert(session);
-        return next.run(request).await;
+    if let Some(id) = session_id(&cookies, &state.cookie_key) {
+        match state.sessions.authenticate(id).await {
+            Ok(Some(user)) => {
+                request.extensions_mut().insert(user);
+                return next.run(request).await;
+            }
+            Ok(None) => {}
+            Err(error) => return AppError(error).into_response(),
+        }
     }
+    clear_session_cookie(&cookies, &state.cookie_key);
     (axum::http::StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
 }
 
-async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl IntoResponse {
+fn session_id(cookies: &Cookies, key: &tower_cookies::Key) -> Option<uuid::Uuid> {
+    cookies
+        .private(key)
+        .get(SESSION_COOKIE_NAME)?
+        .value()
+        .parse()
+        .ok()
+}
+
+fn clear_session_cookie(cookies: &Cookies, key: &tower_cookies::Key) {
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, "");
+    cookie.set_path("/");
+    cookies.private(key).remove(cookie);
+}
+
+async fn login(State(state): State<AuthState>, cookies: Cookies) -> impl IntoResponse {
     let client = &state.oidc_client;
 
     let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
@@ -154,7 +181,7 @@ async fn login(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl Int
 }
 
 async fn callback(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AuthState>,
     cookies: Cookies,
     Query(params): Query<AuthRequest>,
 ) -> impl IntoResponse {
@@ -211,8 +238,13 @@ async fn callback(
         }
     };
 
-    let sub = claims.subject().to_string();
-    info!(sub = %sub, "User login successful");
+    let user_id = match claims.subject().as_str().parse::<uuid::Uuid>() {
+        Ok(user_id) => user_id,
+        Err(error) => {
+            error!(error = ?error, "OIDC subject is not a UUID");
+            return Redirect::to("/login?error=invalid_subject").into_response();
+        }
+    };
 
     // 4. Create Session
     let roles = if let Ok(id_token_str) = serde_json::to_string(id_token) {
@@ -221,18 +253,33 @@ async fn callback(
         vec![]
     };
 
-    let user_session = usecase::UserContext::new(sub.parse().unwrap(), roles);
-    let session_json = serde_json::to_string(&user_session).unwrap();
+    // Re-authentication replaces the current browser session, including its
+    // server-side record, so a saved copy of the previous cookie stays revoked.
+    if let Some(id) = session_id(&cookies, cookie_key)
+        && let Err(error) = state.sessions.revoke(id).await
+    {
+        return AppError(error).into_response();
+    }
+    let session = match state
+        .sessions
+        .create(usecase::UserContext::new(user_id, roles))
+        .await
+    {
+        Ok(session) => session,
+        Err(error) => return AppError(error).into_response(),
+    };
 
-    let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
+    let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session.id.to_string());
     session_cookie.set_path("/");
     session_cookie.set_http_only(true);
     session_cookie.set_same_site(SameSite::Lax);
     #[cfg(not(debug_assertions))]
     session_cookie.set_secure(true);
-    session_cookie.set_max_age(Some(time::Duration::hours(24)));
+    session_cookie.set_max_age(Some(usecase::session::SESSION_LIFETIME));
+    session_cookie.set_expires(session.expires_at);
 
     cookies.private(cookie_key).add(session_cookie);
+    info!(sub = %user_id, "User login successful");
 
     // 5. Cleanup & Redirect
     let mut delete_nonce = Cookie::new(NONCE_COOKIE_NAME, "");
@@ -251,12 +298,13 @@ async fn callback(
 }
 
 /// ログアウト: セッションCookieを削除し、Keycloakからもログアウトする
-pub async fn logout(State(state): State<Arc<AppState>>, cookies: Cookies) -> impl IntoResponse {
-    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, "");
-    cookie.set_path("/");
-    cookie.set_max_age(Some(time::Duration::seconds(0)));
-
-    cookies.private(&state.cookie_key).remove(cookie);
+pub async fn logout(State(state): State<AuthState>, cookies: Cookies) -> impl IntoResponse {
+    if let Some(id) = session_id(&cookies, &state.cookie_key)
+        && let Err(error) = state.sessions.revoke(id).await
+    {
+        return AppError(error).into_response();
+    }
+    clear_session_cookie(&cookies, &state.cookie_key);
 
     // Logout logic
     let client_id = state.oidc_client.client_id().to_string();
@@ -347,3 +395,6 @@ fn extract_roles(id_token_str: &str) -> Vec<String> {
         vec![]
     }
 }
+
+#[cfg(test)]
+mod tests;

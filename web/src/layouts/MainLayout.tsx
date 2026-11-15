@@ -7,6 +7,29 @@ const navItems = [
   { name: "レポート", path: "/reports" },
 ];
 
+function Navigation({ className }: { className: string }) {
+  return (
+    <nav aria-label="メインナビゲーション" className={className}>
+      {navItems.map((item) => (
+        <NavLink
+          key={item.path}
+          to={item.path}
+          end
+          className={({ isActive }) =>
+            `whitespace-nowrap text-sm tracking-wide transition-colors pb-0.5 ${
+              isActive
+                ? "font-bold text-primary border-b-2 border-primary"
+                : "font-medium text-text-sub hover:text-primary"
+            }`
+          }
+        >
+          {item.name}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 const MainLayout = () => {
   const handleLogout = () => {
     window.location.href = "/api/logout";
@@ -46,24 +69,7 @@ const MainLayout = () => {
             </div>
           </div>
           <div className="flex items-center gap-6">
-            <nav className="hidden md:flex gap-6">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end
-                  className={({ isActive }) =>
-                    `text-sm tracking-wide transition-colors pb-0.5 ${
-                      isActive
-                        ? "font-bold text-primary border-b-2 border-primary"
-                        : "font-medium text-text-sub hover:text-primary"
-                    }`
-                  }
-                >
-                  {item.name}
-                </NavLink>
-              ))}
-            </nav>
+            <Navigation className="hidden md:flex gap-6" />
             <div className="flex items-center gap-4 border-l border-gray-200 dark:border-gray-700 pl-4">
               <button
                 aria-label="通知"
@@ -95,6 +101,7 @@ const MainLayout = () => {
             </div>
           </div>
         </div>
+        <Navigation className="flex gap-6 overflow-x-auto px-4 pb-3 md:hidden" />
       </header>
 
       <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto w-full px-4 lg:px-8 py-10">

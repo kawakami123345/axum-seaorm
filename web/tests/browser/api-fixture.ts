@@ -32,6 +32,8 @@ export async function mockApi(page: Page) {
     appliedWrites: [] as { applied_at: string | null }[],
     holdBookSave: undefined as Promise<void> | undefined,
     failNextPublisherSave: false,
+    failSummary: false,
+    holdSummary: undefined as Promise<void> | undefined,
   };
 
   await page.route("https://**/*", (route) => route.abort());
@@ -50,6 +52,13 @@ export async function mockApi(page: Page) {
       if (path === "/shops" && method === "GET")
         return route.fulfill({ json: [shop] });
       if (path === "/dashboard/annual-summary") {
+        await state.holdSummary;
+        if (state.failSummary) {
+          return route.fulfill({
+            status: 500,
+            json: { error: "Internal Server Error" },
+          });
+        }
         const applied = state.books.filter((book) => book.applied_at);
         const total = applied.reduce((sum, book) => sum + book.price, 0);
         return route.fulfill({

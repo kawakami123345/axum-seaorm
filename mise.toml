@@ -12,8 +12,14 @@ run = "bun install --frozen-lockfile"
 
 [tasks.orval]
 description = "Generate the frontend API client from openapi.json"
+depends = ["openapi"]
 dir = "{{config_root}}/web"
 run = "bun run generate-api"
+
+[tasks.openapi]
+description = "Export OpenAPI without starting the API or connecting to services"
+dir = "{{config_root}}"
+run = "cargo run --quiet --locked -p api --example export_openapi -- openapi.json"
 
 [tasks.dev]
 description = "Start the backend and frontend together (Ctrl+C stops both)"
@@ -48,6 +54,11 @@ run = "bun run test"
 description = "Run frontend browser tests with mocked API responses"
 dir = "{{config_root}}/web"
 run = "bun run test:browser"
+
+[tasks."test:database"]
+description = "Run PostgreSQL integration tests in isolated schemas"
+dir = "{{config_root}}"
+run = "cargo test --locked --test postgres -- --include-ignored"
 
 [tasks.codex-start]
 description = "codex remote-control start"

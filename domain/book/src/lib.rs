@@ -10,7 +10,8 @@ pub trait Repository: Sync + Send {
     async fn find_all(&self, filter: ListFilter) -> anyhow::Result<Vec<Book>>;
     async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<Book>>;
     async fn create(&self, item: Book) -> anyhow::Result<()>;
-    async fn update(&self, item: Book) -> anyhow::Result<()>;
+    /// Returns false when the stored revision no longer matches the loaded book.
+    async fn update(&self, item: Book) -> anyhow::Result<bool>;
     async fn delete(&self, item: Book, deleted_by: Uuid) -> anyhow::Result<()>;
 }
 
@@ -48,6 +49,7 @@ pub struct Book {
     created_by: Uuid,
     updated_by: Uuid,
     user_id: Uuid,
+    revision: i64,
 }
 
 impl Book {
@@ -79,6 +81,7 @@ impl Book {
             created_by,
             updated_by: created_by,
             user_id,
+            revision: 0,
         }
     }
 
@@ -98,6 +101,7 @@ impl Book {
         created_by: Uuid,
         updated_by: Uuid,
         user_id: Uuid,
+        revision: i64,
     ) -> Self {
         Self {
             id,
@@ -114,6 +118,7 @@ impl Book {
             created_by,
             updated_by,
             user_id,
+            revision,
         }
     }
 
@@ -158,6 +163,9 @@ impl Book {
     }
     pub fn user_id(&self) -> &Uuid {
         &self.user_id
+    }
+    pub fn revision(&self) -> i64 {
+        self.revision
     }
 
     fn update_audit(&mut self, updated_by: Uuid) {

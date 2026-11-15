@@ -9,6 +9,14 @@
 参照範囲の条件は `usecase/src/lib.rs` の `UserContext::book_filter` にまとめています。
 書籍のユースケースと年度別集計で共通利用し、DBのユーザーID条件は `infra/src/book.rs` にあります。
 
+セッションはDBの`auth_session`テーブルで管理し、認証のたびにサーバー側で24時間の有効期限を確認します。
+ログアウト時はDBのセッションを削除するため、保存したCookieも再利用できません。
+従来のユーザー情報入りCookieは受け付けないので、この変更後は再ログインが必要です。
+
+書籍の更新は読み取り時の`revision`が一致する場合だけ保存し、競合時はHTTP 409を返します。
+競合した場合は再読み込みしてから操作し直してください。
+追加マイグレーションは既存の書籍・履歴を保持したまま、API起動時に適用されます。
+
 ## 日時と依存パッケージ
 
 ドメイン・API・SeaORMのDBモデルの日時には `time::OffsetDateTime` を使います。
@@ -22,6 +30,8 @@ TypeScriptは `typescript-eslint` の対応範囲に合わせて6.0系、reqwest
 フロントエンドのAPIクライアントは `openapi.json` から開発サーバー・ビルドの起動時に自動生成します。
 生成先の `web/src/api/` はGitの管理対象外です。
 手書きの通信処理 `web/src/lib/custom-fetch.ts` はソースとして管理します。
+`mise run orval`はOpenAPIの書き出しからクライアント生成まで実行します。
+`mise run openapi`でOpenAPIだけを書き出すこともできます。DBやKeycloakの起動は不要です。
 
 Postgresとの日時の読み書きは、開発DBの接続情報を使って確認できます。永続データの書き込みは行いません。
 
@@ -83,12 +93,17 @@ mise run dev           # APIとフロントエンドを起動
 mise run dev:backend   # APIのみ
 mise run dev:frontend  # フロントエンドのみ
 mise run setup         # bun.lockから依存を再インストール
-mise run orval         # OpenAPIからAPIクライアントを生成
+mise run openapi       # APIを起動せずOpenAPIを書き出す
+mise run orval         # OpenAPIを書き出してAPIクライアントを生成
 mise run check         # Rustのチェックとフロントエンドのビルド
 mise run test          # Rustワークスペースのテスト
 mise run test:frontend # フロントエンドの単体テスト
 mise run test:browser  # Chromiumで画面操作を検証
+mise run test:database # PostgreSQLの専用スキーマでDB操作・移行を検証
 ```
+
+`test:database`には起動済みPostgresと`DATABASE_URL`が必要です。
+各テストは一意なスキーマを作成し、終了時に削除します。既存の開発用テーブルは変更しません。
 
 `mise.toml`変更後は`mise install`を実行します。Dev Containerの設定変更後は
 **Dev Containers: Rebuild Container**を実行してください。

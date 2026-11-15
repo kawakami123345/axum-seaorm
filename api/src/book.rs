@@ -80,6 +80,7 @@ pub async fn create(
     request_body = usecase::book::UpdateDto,
     responses(
         (status = 204, description = "Book updated successfully"),
+        (status = 409, description = "Book changed during the update"),
         (status = 404, description = "Book not found")
     ),
     params(
@@ -130,6 +131,7 @@ pub async fn delete(
     request_body = usecase::book::ChangeAppliedAtDto,
     responses(
         (status = 200, description = "Book applied_at changed successfully", body = usecase::book::ResponseDto),
+        (status = 409, description = "Book changed during the update"),
         (status = 404, description = "Book not found")
     ),
     params(

@@ -96,6 +96,7 @@ impl publisher::Repository for SqlRepository {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
         ActiveModel::builder()
+            .set_id(item.id())
             .set_pub_id(item.pub_id())
             .set_name(item.name().to_string())
             .set_created_at(item.created_at())

@@ -2,9 +2,42 @@ import { useGetAnnualSummary } from "../api/endpoints/dashboard/dashboard";
 import { formatYen } from "../lib/format";
 
 const BudgetSummary = () => {
-  const { data: summaries = [] } = useGetAnnualSummary({
+  const {
+    data: summaries = [],
+    isPending,
+    error,
+    refetch,
+    isFetching,
+  } = useGetAnnualSummary({
     query: { select: (response) => response.data },
   });
+
+  if (isPending || error) {
+    return (
+      <aside aria-label="予算概要" className="w-full lg:w-[320px] shrink-0">
+        <div className="bg-white dark:bg-card-dark rounded-lg border border-border-color dark:border-gray-700 p-6 shadow-sm">
+          <h3 className="text-sm font-bold mb-4">予算概要</h3>
+          {isPending ? (
+            <p role="status" className="text-sm text-text-sub">
+              集計を読み込み中...
+            </p>
+          ) : (
+            <div role="alert" className="text-sm text-accent-red">
+              <p>予算概要を取得できませんでした。</p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+                className="mt-3 text-primary underline disabled:opacity-50"
+              >
+                再試行
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
 
   // Sort summaries by year descending (newest first)
   const sortedSummaries = [...summaries].sort((a, b) => b.year - a.year);
@@ -20,7 +53,7 @@ const BudgetSummary = () => {
     totalCount > 0 ? Math.round(totalAmount / totalCount) : 0;
 
   return (
-    <aside className="w-full lg:w-[320px] shrink-0">
+    <aside aria-label="予算概要" className="w-full lg:w-[320px] shrink-0">
       <div className="sticky top-28 flex flex-col gap-6">
         <div className="bg-white dark:bg-card-dark rounded-lg border border-border-color dark:border-gray-700 shadow-sm p-6 relative overflow-hidden">
           <div className="flex justify-between items-center mb-6">

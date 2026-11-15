@@ -142,6 +142,7 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.23.1",
  "openidconnect",
@@ -150,6 +151,7 @@ dependencies = [
  "serde_json",
  "time",
  "tokio",
+ "tower",
  "tower-cookies",
  "tower-http 0.7.1",
  "tracing",
@@ -1913,9 +1915,11 @@ dependencies = [
  "publisher",
  "sea-orm",
  "serde",
+ "serde_json",
  "shop",
  "time",
  "tokio",
+ "usecase",
  "uuid",
 ]
 
@@ -3134,10 +3138,12 @@ dependencies = [
  "reqwest",
  "sea-orm",
  "shop",
+ "time",
  "tokio",
  "tower-cookies",
  "tracing-subscriber",
  "usecase",
+ "uuid",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ pub mod book;
 pub mod book_history;
 pub mod publisher;
 pub mod publisher_history;
+pub mod session;
 pub mod shop;
 
 #[cfg(test)]

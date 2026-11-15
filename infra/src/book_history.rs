@@ -29,6 +29,8 @@ pub struct Model {
     pub created_by: Uuid,
     pub updated_by: Uuid,
     pub user_id: Uuid,
+    #[sea_orm(default_value = 0)]
+    pub revision: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -60,6 +62,7 @@ mod tests {
                 created_by,
                 updated_by,
                 user_id,
+                revision,
             } = book;
 
             let Model {
@@ -81,6 +84,7 @@ mod tests {
                 created_by: _,
                 updated_by: _,
                 user_id: _,
+                revision: _,
             } = history;
 
             // コンパイルエラーを防ぐために変数を使用
@@ -99,6 +103,7 @@ mod tests {
                 created_by,
                 updated_by,
                 user_id,
+                revision,
             );
         }
     }

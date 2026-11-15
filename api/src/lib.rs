@@ -21,13 +21,11 @@ pub struct AppState {
     pub publisher_usecase: usecase::publisher::Service,
     pub shop_usecase: usecase::shop::Service,
     pub dashboard_usecase: usecase::dashboard::Service,
-    pub oidc_client: crate::auth::AppClient,
-    pub cookie_key: tower_cookies::Key,
-    pub http_client: reqwest::Client,
+    pub auth: auth::AuthState,
 }
 
-pub fn create_router(state: Arc<AppState>) -> Router {
-    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+fn api_routes() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::with_openapi(ApiDoc::openapi())
         // routes!はPath毎に分ける必要あり
         .routes(routes!(book::get_all, book::create))
         .routes(routes!(book::get, book::update, book::delete))
@@ -46,7 +44,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             shop::delete_shop
         ))
         .routes(routes!(dashboard::get_annual_summary))
-        .split_for_parts();
+}
+
+pub fn openapi_document() -> utoipa::openapi::OpenApi {
+    api_routes().split_for_parts().1
+}
+
+pub fn create_router(state: Arc<AppState>) -> Router {
+    let (api_router, api) = api_routes().split_for_parts();
 
     #[cfg(debug_assertions)]
     {
@@ -58,13 +63,13 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
     // 認証が必要なルート
     let protected_routes = api_router.layer(axum::middleware::from_fn_with_state(
-        state.clone(),
+        state.auth.clone(),
         auth::require_auth,
     ));
 
     // 認証不要のルート (login, callback, logout, swagger-ui)
     let public_routes = Router::new()
-        .merge(auth::auth_router())
+        .merge(auth::auth_router().with_state(state.auth.clone()))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api));
 
     protected_routes

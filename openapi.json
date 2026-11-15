@@ -155,6 +155,9 @@
           },
           "404": {
             "description": "Book not found"
+          },
+          "409": {
+            "description": "Book changed during the update"
           }
         }
       },
@@ -226,6 +229,9 @@
           },
           "404": {
             "description": "Book not found"
+          },
+          "409": {
+            "description": "Book changed during the update"
           }
         }
       }
@@ -659,10 +665,10 @@
           "shop": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/BookShopDto"
               },
               {
-                "$ref": "#/components/schemas/BookShopDto"
+                "type": "null"
               }
             ]
           },
@@ -743,19 +749,19 @@
           },
           "balance": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "count": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "limit": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "total_amount": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "year": {
             "type": "integer",

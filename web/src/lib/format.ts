@@ -3,7 +3,7 @@ const yenFormatter = new Intl.NumberFormat("ja-JP", {
   currency: "JPY",
 });
 
-const dateFormatter = new Intl.DateTimeFormat("ja-JP");
+const dateFormatter = new Intl.DateTimeFormat("ja-JP", { timeZone: "UTC" });
 
 export const formatYen = (amount: number) => yenFormatter.format(amount);
 
