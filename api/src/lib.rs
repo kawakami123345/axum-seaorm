@@ -59,14 +59,6 @@ pub fn openapi_document() -> utoipa::openapi::OpenApi {
 pub fn create_router(state: Arc<AppState>) -> Router {
     let (api_router, api) = api_routes().split_for_parts();
 
-    #[cfg(debug_assertions)]
-    {
-        let openapi_json = api
-            .to_pretty_json()
-            .expect("Failed to generate OpenAPI JSON");
-        std::fs::write("openapi.json", openapi_json).expect("Failed to write openapi.json");
-    }
-
     // 認証が必要なルート
     let protected_routes = api_router.layer(axum::middleware::from_fn_with_state(
         state.auth.clone(),

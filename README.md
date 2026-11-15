@@ -36,7 +36,11 @@ Chronoの直接依存はありませんが、SeaORMやOpenID Connectの間接依
 
 TypeScriptは `typescript-eslint` の対応範囲に合わせて6.0系、reqwestはOpenID Connectとの互換性のため0.12系を使います。
 
-フロントエンドのAPIクライアントは `openapi.json` から開発サーバー・ビルドの起動時に自動生成します。
+`mise run dev`は、OpenAPIの書き出し・OrvalによるAPIクライアント生成・整形を済ませてから、
+APIとViteを並列で起動します。生成に失敗した場合はサーバーを起動しません。
+`dev:frontend`・`check`・`test:frontend`・`test:browser`も、処理の前に同じ生成タスクを実行します。
+APIだけを起動する`dev:backend`ではクライアントを生成しません。
+Orvalのツール定義と生成コマンドは`mise.toml`で管理し、`web/package.json`には重複して定義しません。
 生成先の `web/src/api/` はGitの管理対象外です。
 手書きの通信処理 `web/src/lib/custom-fetch.ts` はソースとして管理します。
 `mise run orval`はOpenAPIの書き出しからクライアント生成まで実行します。
@@ -55,13 +59,34 @@ cargo test -p infra --features test postgres_timestamp_round_trip -- --ignored
 | 設定 | 管理するもの |
 | --- | --- |
 | `mise.toml` | 言語・ツールのバージョンと設定、開発・検証コマンド |
+| `mise.lock`・`.mise/locks/` | miseで解決したツールのバージョン・チェックサムと、Orvalの依存関係 |
 | `.devcontainer/devcontainer.json` | DB・OIDC接続用ENV（`remoteEnv`）、ポート転送、接続先、miseの導入、VS Code拡張 |
 | `.devcontainer/compose.yaml` | 各サーバー自身の起動設定、コンテナ間接続、起動待ち、データ永続化 |
+| `.devcontainer/post-create.sh` | キャッシュ用ボリュームの権限設定、ツール・フロントエンド依存のインストール |
 | `.devcontainer/keycloak/realm-export.json` | 開発用Realm・OIDCクライアント・ユーザー |
 
 アプリが参照するPostgres・Keycloakの接続情報は`devcontainer.json`の`remoteEnv`にまとめます。
 言語・ツール用のENVが必要になった場合は`mise.toml`で管理します。
 `POSTGRES_*`・`KC_*`は各サーバーコンテナの初期化・起動用なので、Compose側で指定します。
+
+`mise.toml`の`[settings] lockfile = true`により、`mise install`やツール更新時に`mise.lock`を
+自動生成・更新します。設定ファイルの編集だけでは生成されません。既存のlockfileがある場合は、
+`latest`や`26`という指定でも解決済みのバージョンを使います。
+対応する最新バージョンへ更新するときは`mise lock --bump`、続いて`mise install`を実行します。
+`mise.lock`と生成された`.mise/locks/`はGitで管理します。
+詳細は[mise公式のlockfileの説明](https://mise.jdx.dev/dev-tools/mise-lock.html)を参照してください。
+`Cargo.lock`・`web/bun.lock`はアプリの依存関係、`devcontainer-lock.json`はDev Container Featuresの
+固定用で、miseが管理するツールのlockfileとは別です。
+
+ソースコードはホストからbind mountし、`target/`・`web/node_modules/`は名前付きボリュームに
+分けています。ビルドや依存パッケージの読み書きはDocker側で行い、コンテナ再作成後も保持します。
+Cargoの`registry`・`git`キャッシュも個別のボリュームで保持します。
+この構成は[Dev Containers公式の推奨方法](https://code.visualstudio.com/remote/advancedcontainers/improve-performance)に沿っています。
+
+キャッシュ用ボリュームには`nocopy`を指定し、ホストにある既存の`target/`・`web/node_modules/`を
+初回にコピーしません。既存ディレクトリの内容は削除せず、コンテナ内ではボリュームが使われます。
+初回はフロントエンド依存を再インストールし、Rustのビルド成果物は次のビルドで生成します。
+ボリュームの権限は作成時に設定し、UID/GIDが変わった場合だけ既存キャッシュの所有者も更新します。
 
 ## 起動
 
@@ -72,12 +97,11 @@ WindowsではDocker DesktopをLinuxコンテナ / WSL 2で起動してくださ�
 2. 初回セットアップが終わったら、コンテナ内のターミナルで実行します。
 
    ```bash
-   mise run setup
    mise run dev
    ```
 
-PostgresとKeycloakはコンテナ作成時に自動起動します。Rust・Bun・Node.jsは`mise install`が導入し、
-`mise run setup`でフロントエンドの依存を`bun.lock`からインストールします。
+PostgresとKeycloakはコンテナ作成時に自動起動します。初回セットアップでRust・Bun・Node.jsと
+フロントエンドの依存を自動インストールします。依存のインストールをやり直す場合は`mise run setup`を使います。
 API起動時にDBマイグレーションが実行されます。Ctrl+CでAPIとViteを停止できます。
 
 | サービス | URL / 接続先 |

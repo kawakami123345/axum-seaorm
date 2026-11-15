@@ -10,10 +10,14 @@ mise run dev:frontend
 ```
 
 APIも同時に起動する場合は`mise run dev`を使います。
+どちらもOpenAPIの書き出し・Orvalによるクライアント生成・整形を済ませてから起動します。
 `/api`へのリクエストはViteからAxumへ転送されます。
 
 依存を変更する場合は`web`で`bun add` / `bun remove`を使い、`bun.lock`を更新します。
 OpenAPIクライアントの再生成は、リポジトリのルートから`mise run orval`を実行します。
+Orval本体と生成コマンドは`mise.toml`で管理します。`package.json`の`dev`・`build`・`test`は
+Vite・TypeScript・単体テストだけを実行するため、開発や検証にはmiseのタスクを使ってください。
+`mise run check`・`mise run test:frontend`・`mise run test:browser`も、最新のAPIクライアントを先に生成します。
 
 書籍・出版社・予算の実装は、機能ごとに `src/features/` にまとめています。
 

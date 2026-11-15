@@ -1,3 +1,6 @@
+[settings]
+lockfile = true
+
 [tools]
 rust = "latest"
 bun = "latest"
@@ -14,7 +17,7 @@ run = "bun install --frozen-lockfile"
 description = "Generate the frontend API client from openapi.json"
 depends = ["openapi"]
 dir = "{{config_root}}/web"
-run = "bun run generate-api"
+run = ["orval --config orval.config.cjs", "bunx --no-install prettier --write src/api"]
 
 [tasks.openapi]
 description = "Export OpenAPI without starting the API or connecting to services"
@@ -27,16 +30,20 @@ depends = ["dev:backend", "dev:frontend"]
 
 [tasks."dev:backend"]
 description = "Start the API and apply database migrations"
+# Wait for client generation when both servers are requested; API-only runs do not need it.
+wait_for = ["orval"]
 dir = "{{config_root}}"
 run = "cargo run --locked"
 
 [tasks."dev:frontend"]
 description = "Start Vite on port 5173"
+depends = ["orval"]
 dir = "{{config_root}}/web"
 run = "bun run dev --host 0.0.0.0 --port 5173 --strictPort"
 
 [tasks.check]
 description = "Check Rust and build the frontend"
+depends = ["orval"]
 dir = "{{config_root}}"
 run = ["cargo check --workspace --locked", "bun run --cwd web build"]
 
@@ -47,11 +54,13 @@ run = "cargo test --workspace --locked"
 
 [tasks."test:frontend"]
 description = "Run frontend unit tests"
+depends = ["orval"]
 dir = "{{config_root}}/web"
 run = "bun run test"
 
 [tasks."test:browser"]
 description = "Run frontend browser tests with mocked API responses"
+depends = ["orval"]
 dir = "{{config_root}}/web"
 run = "bun run test:browser"
 

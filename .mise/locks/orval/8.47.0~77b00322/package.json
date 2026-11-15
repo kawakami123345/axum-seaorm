@@ -1,0 +1,12 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "aube": {
+    "allowBuilds": {
+      "esbuild": true
+    }
+  },
+  "dependencies": {
+    "orval": "8.47.0"
+  }
+}
