@@ -2,8 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreatePublisher,
   useUpdatePublisher,
-} from "../api/endpoints/publisher/publisher";
-import { invalidatePublisherViews } from "../lib/query-cache";
+} from "../../api/endpoints/publisher/publisher";
+import { invalidatePublisherViews } from "../../lib/query-cache";
 
 export function usePublisherMutations() {
   const queryClient = useQueryClient();

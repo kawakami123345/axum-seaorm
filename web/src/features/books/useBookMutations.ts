@@ -3,8 +3,8 @@ import {
   useChangeBookAppliedAt,
   useCreateBook,
   useUpdateBook,
-} from "../api/endpoints/book/book";
-import { invalidateBookViews } from "../lib/query-cache";
+} from "../../api/endpoints/book/book";
+import { invalidateBookViews } from "../../lib/query-cache";
 
 export function useBookMutations() {
   const queryClient = useQueryClient();

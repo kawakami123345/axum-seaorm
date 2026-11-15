@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router";
 import MainLayout from "./layouts/MainLayout";
-import Library from "./pages/Library";
-import Publishers from "./pages/Publishers";
+import Library from "./features/books/Library";
+import Publishers from "./features/publishers/Publishers";
 import Login from "./pages/Login";
 
 function App() {

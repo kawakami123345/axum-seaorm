@@ -1,4 +1,5 @@
 import { Outlet, Link, NavLink } from "react-router";
+import Icon from "../components/Icon";
 
 const navItems = [
   { name: "ダッシュボード", path: "/dashboard" },
@@ -41,24 +42,14 @@ const MainLayout = () => {
         <div className="px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link to="/" className="flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="material-symbols-outlined text-primary text-3xl"
-              >
-                local_library
-              </span>
+              <Icon name="local_library" className="text-primary text-3xl" />
               <h2 className="text-xl font-bold tracking-tight text-text-main dark:text-white">
                 BookKeeper
               </h2>
             </Link>
             <div className="hidden md:flex relative w-64">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-text-sub text-lg"
-                >
-                  search
-                </span>
+                <Icon name="search" className="text-text-sub text-lg" />
               </div>
               <input
                 aria-label="書籍を検索"
@@ -75,9 +66,7 @@ const MainLayout = () => {
                 aria-label="通知"
                 className="text-text-sub hover:text-primary transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
               >
-                <span aria-hidden="true" className="material-symbols-outlined">
-                  notifications
-                </span>
+                <Icon name="notifications" />
               </button>
               <button
                 onClick={handleLogout}
@@ -85,9 +74,7 @@ const MainLayout = () => {
                 title="Logout"
                 aria-label="ログアウト"
               >
-                <span aria-hidden="true" className="material-symbols-outlined">
-                  logout
-                </span>
+                <Icon name="logout" />
               </button>
               <div className="size-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 dark:border-gray-600">
                 <div

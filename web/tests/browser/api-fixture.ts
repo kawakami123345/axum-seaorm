@@ -34,6 +34,9 @@ export async function mockApi(page: Page) {
     failNextPublisherSave: false,
     failSummary: false,
     holdSummary: undefined as Promise<void> | undefined,
+    failBooks: false,
+    failShops: false,
+    failNextBookUpdate: false,
   };
 
   await page.route("https://**/*", (route) => route.abort());
@@ -45,12 +48,24 @@ export async function mockApi(page: Page) {
       const path = new URL(request.url()).pathname.slice("/api".length);
       const method = request.method();
 
-      if (path === "/books" && method === "GET")
+      if (path === "/books" && method === "GET") {
+        if (state.failBooks)
+          return route.fulfill({
+            status: 500,
+            json: { error: "Internal Server Error" },
+          });
         return route.fulfill({ json: state.books });
+      }
       if (path === "/publishers" && method === "GET")
         return route.fulfill({ json: state.publishers });
-      if (path === "/shops" && method === "GET")
+      if (path === "/shops" && method === "GET") {
+        if (state.failShops)
+          return route.fulfill({
+            status: 500,
+            json: { error: "Internal Server Error" },
+          });
         return route.fulfill({ json: [shop] });
+      }
       if (path === "/dashboard/annual-summary") {
         await state.holdSummary;
         if (state.failSummary) {
@@ -107,6 +122,16 @@ export async function mockApi(page: Page) {
         return route.fulfill({ json: book });
       }
       if (path.startsWith("/books/") && method === "PUT") {
+        if (state.failNextBookUpdate) {
+          state.failNextBookUpdate = false;
+          return route.fulfill({
+            status: 409,
+            json: {
+              error:
+                "別の操作で書籍が更新されました。再読み込みしてからやり直してください。",
+            },
+          });
+        }
         const data = request.postDataJSON() as BookCreateDto;
         const book = state.books.find(
           (item) => item.pub_id === path.split("/")[2],
