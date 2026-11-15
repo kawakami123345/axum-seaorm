@@ -21,6 +21,29 @@ pub enum UseCaseError {
 }
 
 impl UseCaseError {
+    pub(crate) fn check_revision(expected: i64, current: i64) -> Result<(), Self> {
+        if expected < 0 || expected == i64::MAX {
+            return Err(Self::DomainRuleViolation("Invalid revision".into()));
+        }
+        if expected != current {
+            return Err(Self::write_conflict());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_write(applied: bool) -> Result<(), Self> {
+        if !applied {
+            return Err(Self::write_conflict());
+        }
+        Ok(())
+    }
+
+    fn write_conflict() -> Self {
+        Self::Conflict(
+            "別の操作で更新または削除されました。再読み込みしてからやり直してください。".into(),
+        )
+    }
+
     pub(crate) fn database(operation: &str, error: anyhow::Error) -> Self {
         eprintln!("Database error in {operation}: {error:?}");
         Self::DatabaseError

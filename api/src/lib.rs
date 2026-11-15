@@ -24,6 +24,12 @@ pub struct AppState {
     pub auth: auth::AuthState,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RevisionQuery {
+    pub revision: i64,
+}
+
 fn api_routes() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         // routes!はPath毎に分ける必要あり

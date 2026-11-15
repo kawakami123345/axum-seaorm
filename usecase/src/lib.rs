@@ -5,6 +5,9 @@ pub mod publisher;
 pub mod session;
 pub mod shop;
 
+#[cfg(test)]
+mod tests;
+
 use ::book::ListFilter;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

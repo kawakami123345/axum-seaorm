@@ -25,7 +25,10 @@ export default function Library() {
 
   const handleSubmit = async (data: BookCreateDto) => {
     if (editor.item) {
-      await update.mutateAsync({ pubId: editor.item.pub_id, data });
+      await update.mutateAsync({
+        pubId: editor.item.pub_id,
+        data: { ...data, revision: editor.item.revision },
+      });
     } else {
       await create.mutateAsync({ data });
     }
@@ -44,7 +47,10 @@ export default function Library() {
       return;
     }
     changeAppliedAt.mutate(
-      { pubId: book.pub_id, data: { applied_at: appliedAt } },
+      {
+        pubId: book.pub_id,
+        data: { applied_at: appliedAt, revision: book.revision },
+      },
       {
         onError: (error) =>
           window.alert(`申請に失敗しました: ${getErrorMessage(error)}`),

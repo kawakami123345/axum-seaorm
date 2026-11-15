@@ -176,6 +176,17 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "description": "Revision read by the client",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -184,6 +195,9 @@
           },
           "404": {
             "description": "Book not found"
+          },
+          "409": {
+            "description": "Book changed since it was loaded"
           }
         }
       }
@@ -370,6 +384,9 @@
           },
           "404": {
             "description": "Publisher not found"
+          },
+          "409": {
+            "description": "Publisher changed since it was loaded"
           }
         }
       },
@@ -388,6 +405,17 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "description": "Revision read by the client",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -396,6 +424,9 @@
           },
           "404": {
             "description": "Publisher not found"
+          },
+          "409": {
+            "description": "Publisher changed since it was loaded"
           }
         }
       }
@@ -521,6 +552,9 @@
           "404": {
             "description": "Shop not found"
           },
+          "409": {
+            "description": "Shop changed since it was loaded"
+          },
           "500": {
             "description": "Internal server error"
           }
@@ -541,6 +575,17 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "description": "Revision read by the client",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -549,6 +594,9 @@
           },
           "404": {
             "description": "Shop not found"
+          },
+          "409": {
+            "description": "Shop changed since it was loaded"
           },
           "500": {
             "description": "Internal server error"
@@ -561,6 +609,9 @@
     "schemas": {
       "BookChangeAppliedAtDto": {
         "type": "object",
+        "required": [
+          "revision"
+        ],
         "properties": {
           "applied_at": {
             "type": [
@@ -568,8 +619,14 @@
               "null"
             ],
             "example": "2024-01-01T00:00:00Z"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "BookCreateDto": {
         "type": "object",
@@ -608,7 +665,8 @@
           "title": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "BookPublisherDto": {
         "type": "object",
@@ -630,6 +688,7 @@
         "type": "object",
         "required": [
           "pub_id",
+          "revision",
           "title",
           "author",
           "publisher",
@@ -661,6 +720,10 @@
           },
           "publisher": {
             "$ref": "#/components/schemas/BookPublisherDto"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "shop": {
             "oneOf": [
@@ -696,6 +759,7 @@
       "BookUpdateDto": {
         "type": "object",
         "required": [
+          "revision",
           "title",
           "author",
           "publisher_id",
@@ -720,6 +784,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
           "shop_id": {
             "type": [
               "string",
@@ -730,7 +799,8 @@
           "title": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "DashboardDto": {
         "type": "object",
@@ -778,12 +848,14 @@
           "name": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "PublisherResponseDto": {
         "type": "object",
         "required": [
           "pub_id",
+          "revision",
           "name"
         ],
         "properties": {
@@ -793,19 +865,30 @@
           "pub_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
       "PublisherUpdateDto": {
         "type": "object",
         "required": [
+          "revision",
           "name"
         ],
         "properties": {
           "name": {
             "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ShopCreateDto": {
         "type": "object",
@@ -816,12 +899,14 @@
           "name": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ShopResponseDto": {
         "type": "object",
         "required": [
           "pub_id",
+          "revision",
           "name"
         ],
         "properties": {
@@ -831,19 +916,30 @@
           "pub_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
       "ShopUpdateDto": {
         "type": "object",
         "required": [
+          "revision",
           "name"
         ],
         "properties": {
           "name": {
             "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       }
     }
   }

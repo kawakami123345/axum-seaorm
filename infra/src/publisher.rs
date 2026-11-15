@@ -2,7 +2,7 @@ use crate::BeginWithUser;
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryOrder};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
@@ -18,6 +18,8 @@ pub struct Model {
     pub updated_at: time::OffsetDateTime,
     pub created_by: Uuid,
     pub updated_by: Uuid,
+    #[sea_orm(default_value = 0)]
+    pub revision: i64,
 
     #[sea_orm(has_many)]
     pub books: HasMany<super::book::Entity>,
@@ -37,6 +39,7 @@ impl ModelEx {
             self.updated_at,
             self.created_by,
             self.updated_by,
+            self.revision,
         ))
     }
 }
@@ -85,6 +88,7 @@ impl publisher::Repository for SqlRepository {
             .set_updated_at(item.updated_at())
             .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
+            .set_revision(item.revision())
             .insert(&txn)
             .await?;
 
@@ -92,33 +96,44 @@ impl publisher::Repository for SqlRepository {
         Ok(())
     }
 
-    async fn update(&self, item: publisher::Publisher) -> anyhow::Result<()> {
+    async fn update(&self, item: publisher::Publisher) -> anyhow::Result<bool> {
         let txn = self.db.begin_with_user(item.updated_by()).await?;
 
-        ActiveModel::builder()
-            .set_id(item.id())
-            .set_pub_id(item.pub_id())
+        let changes = ActiveModel::builder()
             .set_name(item.name().to_string())
-            .set_created_at(item.created_at())
             .set_updated_at(item.updated_at())
-            .set_created_by(*item.created_by())
             .set_updated_by(*item.updated_by())
-            .update(&txn)
+            .set_revision(
+                item.revision()
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("Revision overflow"))?,
+            );
+        let result = Entity::update_many()
+            .set(changes)
+            .filter(Column::Id.eq(item.id()))
+            .filter(Column::PubId.eq(item.pub_id()))
+            .filter(Column::Revision.eq(item.revision()))
+            .exec(&txn)
             .await?;
 
         txn.commit().await?;
-        Ok(())
+        Ok(result.rows_affected == 1)
     }
 
     async fn delete(
         &self,
         item: publisher::Publisher,
         deleted_by: uuid::Uuid,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         let txn = self.db.begin_with_user(&deleted_by).await?;
 
-        Entity::delete_by_id(item.id()).exec(&txn).await?;
+        let result = Entity::delete_many()
+            .filter(Column::Id.eq(item.id()))
+            .filter(Column::PubId.eq(item.pub_id()))
+            .filter(Column::Revision.eq(item.revision()))
+            .exec(&txn)
+            .await?;
         txn.commit().await?;
-        Ok(())
+        Ok(result.rows_affected == 1)
     }
 }

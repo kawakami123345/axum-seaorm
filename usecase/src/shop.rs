@@ -63,18 +63,26 @@ impl Service {
                 pub_id
             )))?;
 
+        UseCaseError::check_revision(dto.revision, shop.revision())?;
         let name = shop::vo::ShopName::new(dto.name)?;
 
         shop.update(name, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.repo
+        let updated = self
+            .repo
             .update(shop)
             .await
-            .map_err(|e| UseCaseError::database("update shop", e))
+            .map_err(|e| UseCaseError::database("update shop", e))?;
+        UseCaseError::check_write(updated)
     }
 
-    pub async fn delete(&self, ctx: &UserContext, pub_id: uuid::Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(
+        &self,
+        ctx: &UserContext,
+        pub_id: uuid::Uuid,
+        revision: i64,
+    ) -> Result<(), UseCaseError> {
         let shop = self
             .repo
             .find_by_pub_id(pub_id)
@@ -85,22 +93,30 @@ impl Service {
                 pub_id
             )))?;
 
-        self.repo
+        UseCaseError::check_revision(revision, shop.revision())?;
+
+        let deleted = self
+            .repo
             .delete(shop, *ctx.user_id())
             .await
-            .map_err(|e| UseCaseError::database("delete shop", e))
+            .map_err(|e| UseCaseError::database("delete shop", e))?;
+        UseCaseError::check_write(deleted)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = ShopCreateDto)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDto {
     pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = ShopUpdateDto)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateDto {
+    #[schema(minimum = 0)]
+    pub revision: i64,
     pub name: String,
 }
 
@@ -108,6 +124,7 @@ pub struct UpdateDto {
 #[schema(as = ShopResponseDto)]
 pub struct ResponseDto {
     pub pub_id: uuid::Uuid,
+    pub revision: i64,
     pub name: String,
 }
 
@@ -115,6 +132,7 @@ impl From<shop::Shop> for ResponseDto {
     fn from(s: shop::Shop) -> Self {
         Self {
             pub_id: s.pub_id(),
+            revision: s.revision(),
             name: s.name().to_string(),
         }
     }
@@ -158,22 +176,102 @@ mod tests {
             self.store.lock().unwrap().push(item.clone());
             Ok(())
         }
-        async fn update(&self, item: shop::Shop) -> anyhow::Result<()> {
+        async fn update(&self, item: shop::Shop) -> anyhow::Result<bool> {
             let mut store = self.store.lock().unwrap();
-            let stored = store
+            let Some(stored) = store
                 .iter_mut()
-                .find(|shop| shop.pub_id() == item.pub_id())
-                .unwrap();
-            *stored = item;
-            Ok(())
+                .find(|shop| shop.pub_id() == item.pub_id() && shop.revision() == item.revision())
+            else {
+                return Ok(false);
+            };
+            *stored = shop::Shop::reconstruct(
+                item.id(),
+                item.pub_id(),
+                shop::vo::ShopName::new(item.name().into())?,
+                item.created_at(),
+                item.updated_at(),
+                *item.created_by(),
+                *item.updated_by(),
+                item.revision() + 1,
+            );
+            Ok(true)
         }
-        async fn delete(&self, item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
-            self.store
-                .lock()
-                .unwrap()
-                .retain(|shop| shop.pub_id() != item.pub_id());
-            Ok(())
+        async fn delete(&self, item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<bool> {
+            let mut store = self.store.lock().unwrap();
+            let len = store.len();
+            store.retain(|shop| {
+                shop.pub_id() != item.pub_id() || shop.revision() != item.revision()
+            });
+            Ok(store.len() != len)
         }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn stale_client_revisions_cannot_update_or_delete(service: Service) {
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .create(
+                &ctx,
+                CreateDto {
+                    name: "Original".into(),
+                },
+            )
+            .await
+            .unwrap();
+        let original = service.get_all().await.unwrap().remove(0);
+        service
+            .update(
+                &ctx,
+                original.pub_id,
+                UpdateDto {
+                    revision: original.revision,
+                    name: "Winner".into(),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            service
+                .update(
+                    &ctx,
+                    original.pub_id,
+                    UpdateDto {
+                        revision: original.revision,
+                        name: "Stale".into(),
+                    }
+                )
+                .await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        assert!(matches!(
+            service
+                .delete(&ctx, original.pub_id, original.revision)
+                .await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        let winner = service.get(original.pub_id).await.unwrap();
+        assert_eq!(winner.name, "Winner");
+        assert_eq!(winner.revision, original.revision + 1);
+        for invalid in [-1, i64::MAX] {
+            assert!(matches!(
+                service
+                    .update(
+                        &ctx,
+                        original.pub_id,
+                        UpdateDto {
+                            revision: invalid,
+                            name: "Invalid".into(),
+                        }
+                    )
+                    .await,
+                Err(UseCaseError::DomainRuleViolation(_))
+            ));
+        }
+        service
+            .delete(&ctx, original.pub_id, winner.revision)
+            .await
+            .unwrap();
     }
 
     #[fixture]
@@ -209,6 +307,7 @@ mod tests {
                 &other_user,
                 created.pub_id,
                 UpdateDto {
+                    revision: created.revision,
                     name: "Updated Shop".into(),
                 },
             )
@@ -227,7 +326,10 @@ mod tests {
         assert_eq!(stored.created_by(), ctx.user_id());
         assert_eq!(stored.updated_by(), other_user.user_id());
 
-        service.delete(&other_user, created.pub_id).await.unwrap();
+        service
+            .delete(&other_user, created.pub_id, stored.revision())
+            .await
+            .unwrap();
         assert!(matches!(
             service.get(created.pub_id).await,
             Err(UseCaseError::NotFound(_))

@@ -88,6 +88,82 @@ test("retries a failed book list without treating it as an empty list", async ({
   ).toBeVisible();
 });
 
+test("keeps a stale book edit version until the user reopens the latest record", async ({
+  page,
+}) => {
+  const state = await mockApi(page);
+  await page.goto("/library");
+  await page
+    .getByRole("button", { name: "書籍「Original Book」を編集" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "書籍情報を編集" });
+  await dialog.getByLabel("タイトル", { exact: true }).fill("My draft");
+
+  state.books[0]!.title = "Other edit";
+  state.books[0]!.revision = 1;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await dialog.getByRole("button", { name: "更新する" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("再読み込み");
+    await expect(dialog.getByLabel("タイトル", { exact: true })).toHaveValue(
+      "My draft",
+    );
+    expect(state.bookUpdates[attempt]!.revision).toBe(0);
+    expect(state.bookUpdates[attempt]).not.toHaveProperty("id");
+    expect(state.bookUpdates[attempt]).not.toHaveProperty("pub_id");
+    expect(state.books[0]!.title).toBe("Other edit");
+    expect(state.books[0]!.revision).toBe(1);
+  }
+
+  await dialog.getByRole("button", { name: "キャンセル" }).click();
+  await page.getByRole("button", { name: "書籍「Other edit」を編集" }).click();
+  await expect(dialog.getByLabel("タイトル", { exact: true })).toHaveValue(
+    "Other edit",
+  );
+  await dialog.getByLabel("タイトル", { exact: true }).fill("Reviewed edit");
+  await dialog.getByRole("button", { name: "更新する" }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(state.bookUpdates[2]!.revision).toBe(1);
+  expect(state.books[0]!.revision).toBe(2);
+  expect(state.books[0]!.title).toBe("Reviewed edit");
+});
+
+test("sends the publisher revision and preserves stale edits on conflict", async ({
+  page,
+}) => {
+  const state = await mockApi(page);
+  await page.goto("/publishers");
+  await page
+    .getByRole("button", { name: "出版社「Test Publisher」を編集" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "出版社情報を編集" });
+  await dialog
+    .getByLabel("出版社名", { exact: true })
+    .fill("My publisher draft");
+  state.publishers[0]!.name = "Other publisher edit";
+  state.publishers[0]!.revision = 1;
+  await dialog.getByRole("button", { name: "更新する" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("再読み込み");
+  await expect(dialog.getByLabel("出版社名", { exact: true })).toHaveValue(
+    "My publisher draft",
+  );
+  expect(state.publisherUpdates[0]).toEqual({
+    name: "My publisher draft",
+    revision: 0,
+  });
+  expect(state.publishers[0]!.name).toBe("Other publisher edit");
+  await dialog.getByRole("button", { name: "キャンセル" }).click();
+  await page
+    .getByRole("button", { name: "出版社「Other publisher edit」を編集" })
+    .click();
+  await dialog
+    .getByLabel("出版社名", { exact: true })
+    .fill("Reviewed publisher");
+  await dialog.getByRole("button", { name: "更新する" }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(state.publisherUpdates[1]!.revision).toBe(1);
+  expect(state.publishers[0]!.revision).toBe(2);
+});
+
 test("retries failed editor choices without reporting a missing publisher", async ({
   page,
 }) => {

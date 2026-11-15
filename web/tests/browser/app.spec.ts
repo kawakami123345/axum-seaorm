@@ -218,7 +218,7 @@ test("rejects impossible expense dates and refreshes the annual summary after ap
   await expect(page.getByText("申請済", { exact: true })).toBeVisible();
   await expect(page.getByText("2024年度", { exact: true })).toBeVisible();
   expect(state.appliedWrites).toEqual([
-    { applied_at: "2024-12-31T00:00:00.000Z" },
+    { applied_at: "2024-12-31T00:00:00.000Z", revision: 0 },
   ]);
 });
 

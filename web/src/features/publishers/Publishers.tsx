@@ -23,7 +23,10 @@ export default function Publishers() {
 
   const handleSubmit = async (data: PublisherCreateDto) => {
     if (editor.item) {
-      await update.mutateAsync({ pubId: editor.item.pub_id, data });
+      await update.mutateAsync({
+        pubId: editor.item.pub_id,
+        data: { ...data, revision: editor.item.revision },
+      });
     } else {
       await create.mutateAsync({ data });
     }

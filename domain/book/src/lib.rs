@@ -12,7 +12,8 @@ pub trait Repository: Sync + Send {
     async fn create(&self, item: Book) -> anyhow::Result<()>;
     /// Returns false when the stored revision no longer matches the loaded book.
     async fn update(&self, item: Book) -> anyhow::Result<bool>;
-    async fn delete(&self, item: Book, deleted_by: Uuid) -> anyhow::Result<()>;
+    /// Returns false when the record was updated or deleted after it was loaded.
+    async fn delete(&self, item: Book, deleted_by: Uuid) -> anyhow::Result<bool>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

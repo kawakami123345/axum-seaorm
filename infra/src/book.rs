@@ -66,6 +66,7 @@ impl ModelEx {
                     p.updated_at,
                     p.created_by,
                     p.updated_by,
+                    p.revision,
                 )
             }
             None => return Err(anyhow::anyhow!("Publisher not found in DB")),
@@ -84,6 +85,7 @@ impl ModelEx {
                     s.updated_at,
                     s.created_by,
                     s.updated_by,
+                    s.revision,
                 ))
             }
             None => None,
@@ -190,11 +192,16 @@ impl book::Repository for SqlRepository {
             .set_updated_by(*item.updated_by())
             .set_publisher_id(item.publisher().id())
             .set_shop_id(item.shop().clone().map(|s| s.id()))
-            .set_revision(item.revision() + 1);
+            .set_revision(
+                item.revision()
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("Revision overflow"))?,
+            );
 
         let result = Entity::update_many()
             .set(changes)
             .filter(Column::Id.eq(item.id()))
+            .filter(Column::PubId.eq(item.pub_id()))
             .filter(Column::Revision.eq(item.revision()))
             .exec(&txn)
             .await?;
@@ -203,11 +210,16 @@ impl book::Repository for SqlRepository {
         Ok(result.rows_affected == 1)
     }
 
-    async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, item: book::Book, deleted_by: uuid::Uuid) -> anyhow::Result<bool> {
         let txn = self.db.begin_with_user(&deleted_by).await?;
-        Entity::delete_by_id(item.id()).exec(&txn).await?;
+        let result = Entity::delete_many()
+            .filter(Column::Id.eq(item.id()))
+            .filter(Column::PubId.eq(item.pub_id()))
+            .filter(Column::Revision.eq(item.revision()))
+            .exec(&txn)
+            .await?;
         txn.commit().await?;
-        Ok(())
+        Ok(result.rows_affected == 1)
     }
 }
 

@@ -1,18 +1,23 @@
 import type { Page } from "@playwright/test";
 import type {
   BookCreateDto,
+  BookUpdateDto,
+  BookChangeAppliedAtDto,
   BookResponseDto,
   PublisherResponseDto,
+  PublisherUpdateDto,
 } from "../../src/api/model";
 
 export async function mockApi(page: Page) {
   const publisher: PublisherResponseDto = {
     pub_id: "11111111-1111-4111-8111-111111111111",
     name: "Test Publisher",
+    revision: 0,
   };
   const shop = {
     pub_id: "22222222-2222-4222-8222-222222222222",
     name: "Test Shop",
+    revision: 0,
   };
   const state = {
     books: [
@@ -25,11 +30,14 @@ export async function mockApi(page: Page) {
         shop: null,
         format: "Real",
         applied_at: null,
+        revision: 0,
       },
     ] as BookResponseDto[],
     publishers: [publisher],
     bookWrites: [] as { data: BookCreateDto; csrfToken?: string }[],
-    appliedWrites: [] as { applied_at: string | null }[],
+    bookUpdates: [] as BookUpdateDto[],
+    publisherUpdates: [] as PublisherUpdateDto[],
+    appliedWrites: [] as BookChangeAppliedAtDto[],
     holdBookSave: undefined as Promise<void> | undefined,
     failNextPublisherSave: false,
     failSummary: false,
@@ -109,19 +117,31 @@ export async function mockApi(page: Page) {
           shop: data.shop_id ? shop : null,
           format: data.format ?? "Real",
           applied_at: null,
+          revision: 0,
         });
         return route.fulfill({ status: 204 });
       }
       if (path.startsWith("/books/") && path.endsWith("/applied_at")) {
-        const data = request.postDataJSON() as { applied_at: string | null };
+        const data = request.postDataJSON() as BookChangeAppliedAtDto;
         state.appliedWrites.push(data);
         const book = state.books.find(
           (item) => item.pub_id === path.split("/")[2],
         )!;
-        book.applied_at = data.applied_at;
+        if (data.revision !== book.revision) {
+          return route.fulfill({
+            status: 409,
+            json: {
+              error: "別の操作で更新されました。再読み込みしてください。",
+            },
+          });
+        }
+        book.applied_at = data.applied_at ?? null;
+        book.revision += 1;
         return route.fulfill({ json: book });
       }
       if (path.startsWith("/books/") && method === "PUT") {
+        const data = request.postDataJSON() as BookUpdateDto;
+        state.bookUpdates.push(data);
         if (state.failNextBookUpdate) {
           state.failNextBookUpdate = false;
           return route.fulfill({
@@ -132,10 +152,17 @@ export async function mockApi(page: Page) {
             },
           });
         }
-        const data = request.postDataJSON() as BookCreateDto;
         const book = state.books.find(
           (item) => item.pub_id === path.split("/")[2],
         )!;
+        if (data.revision !== book.revision) {
+          return route.fulfill({
+            status: 409,
+            json: {
+              error: "別の操作で更新されました。再読み込みしてください。",
+            },
+          });
+        }
         Object.assign(book, {
           title: data.title,
           author: data.author,
@@ -145,6 +172,7 @@ export async function mockApi(page: Page) {
             (item) => item.pub_id === data.publisher_id,
           ),
           shop: data.shop_id ? shop : null,
+          revision: book.revision + 1,
         });
         return route.fulfill({ status: 204 });
       }
@@ -160,14 +188,26 @@ export async function mockApi(page: Page) {
         state.publishers.push({
           pub_id: "55555555-5555-4555-8555-555555555555",
           name,
+          revision: 0,
         });
         return route.fulfill({ status: 204 });
       }
       if (path.startsWith("/publishers/") && method === "PUT") {
-        const { name } = request.postDataJSON() as { name: string };
-        state.publishers.find(
+        const data = request.postDataJSON() as PublisherUpdateDto;
+        state.publisherUpdates.push(data);
+        const publisher = state.publishers.find(
           (item) => item.pub_id === path.split("/")[2],
-        )!.name = name;
+        )!;
+        if (data.revision !== publisher.revision) {
+          return route.fulfill({
+            status: 409,
+            json: {
+              error: "別の操作で更新されました。再読み込みしてください。",
+            },
+          });
+        }
+        publisher.name = data.name;
+        publisher.revision += 1;
         return route.fulfill({ status: 204 });
       }
       return route.fulfill({

@@ -2,7 +2,7 @@ use crate::AppState;
 use crate::error::AppError;
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -76,6 +76,7 @@ pub async fn create(
     request_body = usecase::publisher::UpdateDto,
     responses(
         (status = 204, description = "Publisher updated successfully"),
+        (status = 409, description = "Publisher changed since it was loaded"),
         (status = 404, description = "Publisher not found")
     ),
     params(
@@ -101,18 +102,25 @@ pub async fn update(
     operation_id = "delete_publisher",
     responses(
         (status = 204, description = "Publisher deleted successfully"),
+        (status = 409, description = "Publisher changed since it was loaded"),
         (status = 404, description = "Publisher not found")
     ),
     params(
-        ("pub_id" = uuid::Uuid, Path, description = "Publisher pub_id")
+        ("pub_id" = uuid::Uuid, Path, description = "Publisher pub_id"),
+        ("revision" = i64, Query, minimum = 0, description = "Revision read by the client")
     )
 )]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     Extension(ctx): Extension<usecase::UserContext>,
     Path(pub_id): Path<uuid::Uuid>,
+    Query(query): Query<crate::RevisionQuery>,
 ) -> impl IntoResponse {
-    match state.publisher_usecase.delete(&ctx, pub_id).await {
+    match state
+        .publisher_usecase
+        .delete(&ctx, pub_id, query.revision)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }

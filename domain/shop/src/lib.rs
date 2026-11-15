@@ -10,8 +10,10 @@ pub trait Repository: Sync + Send {
     async fn find_all(&self) -> anyhow::Result<Vec<Shop>>;
     async fn find_by_pub_id(&self, pub_id: uuid::Uuid) -> anyhow::Result<Option<Shop>>;
     async fn create(&self, item: Shop) -> anyhow::Result<()>;
-    async fn update(&self, item: Shop) -> anyhow::Result<()>;
-    async fn delete(&self, item: Shop, deleted_by: Uuid) -> anyhow::Result<()>;
+    /// Returns false when the stored revision no longer matches the loaded shop.
+    async fn update(&self, item: Shop) -> anyhow::Result<bool>;
+    /// Returns false when the record was updated or deleted after it was loaded.
+    async fn delete(&self, item: Shop, deleted_by: Uuid) -> anyhow::Result<bool>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +27,7 @@ pub struct Shop {
     updated_at: time::OffsetDateTime,
     created_by: Uuid,
     updated_by: Uuid,
+    revision: i64,
 }
 
 impl Shop {
@@ -38,9 +41,11 @@ impl Shop {
             updated_at: now,
             created_by,
             updated_by: created_by,
+            revision: 0,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn reconstruct(
         id: i32,
         pub_id: uuid::Uuid,
@@ -49,6 +54,7 @@ impl Shop {
         updated_at: time::OffsetDateTime,
         created_by: Uuid,
         updated_by: Uuid,
+        revision: i64,
     ) -> Self {
         Self {
             id,
@@ -58,6 +64,7 @@ impl Shop {
             updated_at,
             created_by,
             updated_by,
+            revision,
         }
     }
 
@@ -81,6 +88,9 @@ impl Shop {
     }
     pub fn updated_by(&self) -> &Uuid {
         &self.updated_by
+    }
+    pub fn revision(&self) -> i64 {
+        self.revision
     }
 
     fn update_audit(&mut self, updated_by: Uuid) {

@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -80,6 +80,7 @@ pub async fn get_shop(
     ),
     responses(
         (status = 204, description = "Shop updated successfully"),
+        (status = 409, description = "Shop changed since it was loaded"),
         (status = 404, description = "Shop not found"),
         (status = 500, description = "Internal server error")
     )
@@ -101,10 +102,12 @@ pub async fn update_shop(
     path = "/shops/{pub_id}",
     tag = "Shop",
     params(
-        ("pub_id" = Uuid, Path, description = "Shop ID")
+        ("pub_id" = Uuid, Path, description = "Shop ID"),
+        ("revision" = i64, Query, minimum = 0, description = "Revision read by the client")
     ),
     responses(
         (status = 204, description = "Shop deleted successfully"),
+        (status = 409, description = "Shop changed since it was loaded"),
         (status = 404, description = "Shop not found"),
         (status = 500, description = "Internal server error")
     )
@@ -113,8 +116,13 @@ pub async fn delete_shop(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
     Extension(ctx): Extension<usecase::UserContext>,
+    Query(query): Query<crate::RevisionQuery>,
 ) -> impl IntoResponse {
-    match state.shop_usecase.delete(&ctx, pub_id).await {
+    match state
+        .shop_usecase
+        .delete(&ctx, pub_id, query.revision)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }

@@ -137,6 +137,7 @@ impl Service {
         };
 
         let mut book = self.find_book(ctx, pub_id).await?;
+        UseCaseError::check_revision(dto.revision, book.revision())?;
 
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
             self.find_publisher(dto.publisher_id).await?
@@ -157,16 +158,24 @@ impl Service {
         )
         .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        self.save_book(book, "update book").await
+        self.save_book(book, "update book").await.map(|_| ())
     }
 
-    pub async fn delete(&self, ctx: &UserContext, pub_id: Uuid) -> Result<(), UseCaseError> {
+    pub async fn delete(
+        &self,
+        ctx: &UserContext,
+        pub_id: Uuid,
+        revision: i64,
+    ) -> Result<(), UseCaseError> {
         let book = self.find_book(ctx, pub_id).await?;
+        UseCaseError::check_revision(revision, book.revision())?;
 
-        self.repo
+        let deleted = self
+            .repo
             .delete(book, *ctx.user_id())
             .await
-            .map_err(|e| UseCaseError::database("delete book", e))
+            .map_err(|e| UseCaseError::database("delete book", e))?;
+        UseCaseError::check_write(deleted)
     }
 
     pub async fn change_applied_at(
@@ -176,33 +185,35 @@ impl Service {
         dto: ChangeAppliedAtDto,
     ) -> Result<ResponseDto, UseCaseError> {
         let mut book = self.find_book(ctx, pub_id).await?;
+        UseCaseError::check_revision(dto.revision, book.revision())?;
 
         book.change_applied_at(dto.applied_at, *ctx.user_id())
             .map_err(|e| UseCaseError::DomainRuleViolation(e.to_string()))?;
 
-        let response = ResponseDto::from(&book);
-        self.save_book(book, "change book applied date").await?;
+        let mut response = ResponseDto::from(&book);
+        response.revision = self.save_book(book, "change book applied date").await?;
 
         Ok(response)
     }
 
-    async fn save_book(&self, book: book::Book, operation: &str) -> Result<(), UseCaseError> {
+    async fn save_book(&self, book: book::Book, operation: &str) -> Result<i64, UseCaseError> {
+        let next_revision = book
+            .revision()
+            .checked_add(1)
+            .ok_or_else(|| UseCaseError::DomainRuleViolation("Invalid revision".into()))?;
         let updated = self
             .repo
             .update(book)
             .await
             .map_err(|e| UseCaseError::database(operation, e))?;
-        if !updated {
-            return Err(UseCaseError::Conflict(
-                "別の操作で書籍が更新されました。再読み込みしてからやり直してください。".into(),
-            ));
-        }
-        Ok(())
+        UseCaseError::check_write(updated)?;
+        Ok(next_revision)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookCreateDto)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDto {
     pub title: String,
     pub author: String,
@@ -215,7 +226,10 @@ pub struct CreateDto {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookUpdateDto)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateDto {
+    #[schema(minimum = 0)]
+    pub revision: i64,
     pub title: String,
     pub author: String,
     pub publisher_id: uuid::Uuid,
@@ -227,7 +241,10 @@ pub struct UpdateDto {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = BookChangeAppliedAtDto)]
+#[serde(deny_unknown_fields)]
 pub struct ChangeAppliedAtDto {
+    #[schema(minimum = 0)]
+    pub revision: i64,
     #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
     #[serde(default, with = "time::serde::rfc3339::option")]
     pub applied_at: Option<time::OffsetDateTime>,
@@ -237,6 +254,7 @@ pub struct ChangeAppliedAtDto {
 #[schema(as = BookResponseDto)]
 pub struct ResponseDto {
     pub pub_id: uuid::Uuid,
+    pub revision: i64,
     pub title: String,
     pub author: String,
     pub publisher: BookPublisherDto,
@@ -259,6 +277,7 @@ impl From<&book::Book> for ResponseDto {
     fn from(book: &book::Book) -> Self {
         Self {
             pub_id: book.pub_id(),
+            revision: book.revision(),
             title: book.title().to_string(),
             author: book.author().to_string(),
             publisher: BookPublisherDto {
@@ -354,7 +373,10 @@ mod tests {
 
         async fn update(&self, item: book::Book) -> anyhow::Result<bool> {
             let mut store = self.store.lock().unwrap();
-            if let Some(index) = store.iter().position(|b| b.id() == item.id()) {
+            if let Some(index) = store
+                .iter()
+                .position(|b| b.id() == item.id() && b.pub_id() == item.pub_id())
+            {
                 if store[index].revision() != item.revision() {
                     return Ok(false);
                 }
@@ -382,10 +404,11 @@ mod tests {
             }
         }
 
-        async fn delete(&self, item: book::Book, _deleted_by: uuid::Uuid) -> anyhow::Result<()> {
+        async fn delete(&self, item: book::Book, _deleted_by: uuid::Uuid) -> anyhow::Result<bool> {
             let mut store = self.store.lock().unwrap();
-            store.retain(|b| b.pub_id() != item.pub_id());
-            Ok(())
+            let len = store.len();
+            store.retain(|b| b.pub_id() != item.pub_id() || b.revision() != item.revision());
+            Ok(store.len() != len)
         }
     }
 
@@ -425,14 +448,14 @@ mod tests {
             self.store.lock().unwrap().push(item.clone());
             Ok(())
         }
-        async fn update(&self, _item: publisher::Publisher) -> anyhow::Result<()> {
+        async fn update(&self, _item: publisher::Publisher) -> anyhow::Result<bool> {
             panic!("Not implemented")
         }
         async fn delete(
             &self,
             _item: publisher::Publisher,
             _delete_by: Uuid,
-        ) -> anyhow::Result<()> {
+        ) -> anyhow::Result<bool> {
             panic!("Not implemented")
         }
     }
@@ -470,10 +493,10 @@ mod tests {
             self.store.lock().unwrap().push(item.clone());
             Ok(())
         }
-        async fn update(&self, _item: shop::Shop) -> anyhow::Result<()> {
+        async fn update(&self, _item: shop::Shop) -> anyhow::Result<bool> {
             panic!("Not implemented")
         }
-        async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<()> {
+        async fn delete(&self, _item: shop::Shop, _deleted_by: Uuid) -> anyhow::Result<bool> {
             panic!("Not implemented")
         }
     }
@@ -597,6 +620,7 @@ mod tests {
                 &ctx,
                 pub_id,
                 ChangeAppliedAtDto {
+                    revision: 0,
                     applied_at: Some(applied_at),
                 },
             )
@@ -611,6 +635,98 @@ mod tests {
             service.get(&ctx, pub_id).await.unwrap().applied_at,
             Some(applied_at)
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn stale_client_revisions_cannot_update_apply_or_delete(
+        #[future] service: (
+            Service,
+            Arc<FakePublisherRepository>,
+            Arc<FakeShopRepository>,
+        ),
+    ) {
+        let (service, publishers, _) = service.await;
+        let publisher_id = Uuid::new_v4();
+        publishers.add(create_dummy_publisher(publisher_id));
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        service
+            .create(
+                &ctx,
+                CreateDto {
+                    title: "Original".into(),
+                    author: "Author".into(),
+                    publisher_id,
+                    shop_id: None,
+                    format: None,
+                    price: 100,
+                },
+            )
+            .await
+            .unwrap();
+        let original = service.get_all(&ctx).await.unwrap().remove(0);
+        let dto = |revision| UpdateDto {
+            revision,
+            title: "Winner".into(),
+            author: "Author".into(),
+            publisher_id,
+            shop_id: None,
+            format: None,
+            price: 200,
+        };
+        service
+            .update(&ctx, original.pub_id, dto(original.revision))
+            .await
+            .unwrap();
+        assert!(matches!(
+            service
+                .update(&ctx, original.pub_id, dto(original.revision))
+                .await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        assert!(matches!(
+            service
+                .change_applied_at(
+                    &ctx,
+                    original.pub_id,
+                    ChangeAppliedAtDto {
+                        revision: original.revision,
+                        applied_at: Some(time::OffsetDateTime::now_utc()),
+                    }
+                )
+                .await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        assert!(matches!(
+            service
+                .delete(&ctx, original.pub_id, original.revision)
+                .await,
+            Err(UseCaseError::Conflict(_))
+        ));
+        let winner = service.get(&ctx, original.pub_id).await.unwrap();
+        assert_eq!(winner.revision, original.revision + 1);
+        assert_eq!(winner.title, "Winner");
+        assert!(winner.applied_at.is_none());
+        let applied = service
+            .change_applied_at(
+                &ctx,
+                original.pub_id,
+                ChangeAppliedAtDto {
+                    revision: winner.revision,
+                    applied_at: Some(time::OffsetDateTime::now_utc()),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(applied.revision, winner.revision + 1);
+        assert_eq!(
+            service.get(&ctx, original.pub_id).await.unwrap().revision,
+            applied.revision
+        );
+        service
+            .delete(&ctx, original.pub_id, applied.revision)
+            .await
+            .unwrap();
     }
 
     #[rstest]
@@ -641,8 +757,10 @@ mod tests {
             .await
             .unwrap();
         let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
-        let dto = serde_json::from_str(r#"{"applied_at":"2025-01-01T00:30:00.123456789+09:00"}"#)
-            .unwrap();
+        let dto = serde_json::from_str(
+            r#"{"revision":0,"applied_at":"2025-01-01T00:30:00.123456789+09:00"}"#,
+        )
+        .unwrap();
         let response = service.change_applied_at(&ctx, pub_id, dto).await.unwrap();
 
         assert_eq!(
@@ -669,7 +787,7 @@ mod tests {
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].year, 2024);
 
-        for json in [r#"{"applied_at":null}"#, "{}"] {
+        for json in [r#"{"revision":1,"applied_at":null}"#, r#"{"revision":2}"#] {
             let dto = serde_json::from_str(json).unwrap();
             let response = service.change_applied_at(&ctx, pub_id, dto).await.unwrap();
             assert!(serde_json::to_value(response).unwrap()["applied_at"].is_null());
@@ -685,6 +803,7 @@ mod tests {
                 &ctx,
                 pub_id,
                 ChangeAppliedAtDto {
+                    revision: 3,
                     applied_at: Some(outside_utc_range),
                 },
             )
@@ -733,12 +852,13 @@ mod tests {
             .unwrap();
         let pub_id = service.get_all(&ctx).await.unwrap()[0].pub_id;
 
-        for shop_id in [Some(shop_id), None] {
+        for (revision, shop_id) in [Some(shop_id), None].into_iter().enumerate() {
             service
                 .update(
                     &ctx,
                     pub_id,
                     UpdateDto {
+                        revision: revision as i64,
                         title: "Updated".into(),
                         author: "New Author".into(),
                         publisher_id: next_publisher_id,
@@ -806,6 +926,7 @@ mod tests {
                     &ctx,
                     pub_id,
                     UpdateDto {
+                        revision: 0,
                         title: dto.title,
                         author: dto.author,
                         publisher_id: dto.publisher_id,
@@ -987,6 +1108,7 @@ mod tests {
                 &actor,
                 pub_id,
                 UpdateDto {
+                    revision: 0,
                     title: "Updated".into(),
                     author: "Author".into(),
                     publisher_id,
@@ -1005,6 +1127,7 @@ mod tests {
                 &actor,
                 pub_id,
                 ChangeAppliedAtDto {
+                    revision: i64::from(allowed),
                     applied_at: Some(applied_at),
                 },
             )
@@ -1012,7 +1135,7 @@ mod tests {
 
         let stored = service.repo.find_by_pub_id(pub_id).await.unwrap().unwrap();
         assert_eq!(stored.user_id(), owner.user_id());
-        let deleted = service.delete(&actor, pub_id).await;
+        let deleted = service.delete(&actor, pub_id, stored.revision()).await;
 
         if allowed {
             assert_eq!(fetched.unwrap().title, "Original");
@@ -1143,7 +1266,7 @@ mod tests {
         let created = all.remove(0);
 
         service
-            .delete(&ctx, created.pub_id)
+            .delete(&ctx, created.pub_id, created.revision)
             .await
             .expect("Failed to delete");
         assert!(service.get(&ctx, created.pub_id).await.is_err());

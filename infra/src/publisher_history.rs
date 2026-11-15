@@ -20,6 +20,8 @@ pub struct Model {
     pub updated_at: time::OffsetDateTime,
     pub created_by: Uuid,
     pub updated_by: Uuid,
+    #[sea_orm(default_value = 0)]
+    pub revision: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -42,6 +44,7 @@ mod tests {
                 updated_at,
                 created_by,
                 updated_by,
+                revision,
             } = pub_orig;
 
             let Model {
@@ -56,10 +59,11 @@ mod tests {
                 updated_at: _,
                 created_by: _,
                 updated_by: _,
+                revision: _,
             } = history;
 
             let _ = (
-                id, pub_id, name, created_at, updated_at, created_by, updated_by,
+                id, pub_id, name, created_at, updated_at, created_by, updated_by, revision,
             );
         }
     }

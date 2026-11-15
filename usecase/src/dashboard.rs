@@ -129,12 +129,13 @@ mod tests {
             Ok(true)
         }
 
-        async fn delete(&self, item: book::Book, _deleted_by: Uuid) -> anyhow::Result<()> {
-            self.store
-                .lock()
-                .unwrap()
-                .retain(|book| book.pub_id() != item.pub_id());
-            Ok(())
+        async fn delete(&self, item: book::Book, _deleted_by: Uuid) -> anyhow::Result<bool> {
+            let mut store = self.store.lock().unwrap();
+            let len = store.len();
+            store.retain(|book| {
+                book.pub_id() != item.pub_id() || book.revision() != item.revision()
+            });
+            Ok(store.len() != len)
         }
     }
 

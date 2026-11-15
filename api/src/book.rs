@@ -2,7 +2,7 @@ use crate::AppState;
 use crate::error::AppError;
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -106,18 +106,25 @@ pub async fn update(
     operation_id = "delete_book",
     responses(
         (status = 204, description = "Book deleted successfully"),
+        (status = 409, description = "Book changed since it was loaded"),
         (status = 404, description = "Book not found")
     ),
     params(
-        ("pub_id" = uuid::Uuid, Path, description = "Book pub_id")
+        ("pub_id" = uuid::Uuid, Path, description = "Book pub_id"),
+        ("revision" = i64, Query, minimum = 0, description = "Revision read by the client")
     )
 )]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     Path(pub_id): Path<uuid::Uuid>,
     Extension(ctx): Extension<usecase::UserContext>,
+    Query(query): Query<crate::RevisionQuery>,
 ) -> impl IntoResponse {
-    match state.book_usecase.delete(&ctx, pub_id).await {
+    match state
+        .book_usecase
+        .delete(&ctx, pub_id, query.revision)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => AppError(e).into_response(),
     }
