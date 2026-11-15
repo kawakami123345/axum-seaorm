@@ -23,4 +23,5 @@ done
 
 mise trust
 mise install
+mise reshim
 mise run setup

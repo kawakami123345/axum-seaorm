@@ -6,6 +6,7 @@
   "workspaceFolder": "/workspaces/project",
   "remoteUser": "vscode",
   "remoteEnv": {
+    "PATH": "/home/vscode/.local/share/mise/shims:${containerEnv:PATH}",
     "DATABASE_URL": "postgres://user:password@postgres:5432/rust_web_db",
     "APP_URL": "http://localhost:3000",
     "OIDC_CLIENT_ID": "rust_web",

@@ -102,6 +102,8 @@ WindowsではDocker DesktopをLinuxコンテナ / WSL 2で起動してくださ�
 
 PostgresとKeycloakはコンテナ作成時に自動起動します。初回セットアップでRust・Bun・Node.jsと
 フロントエンドの依存を自動インストールします。依存のインストールをやり直す場合は`mise run setup`を使います。
+miseのshimsを`remoteEnv.PATH`に追加しているため、ターミナルやVS Code拡張からもインストール済みのツールを使えます。
+このPATH設定の変更を反映するには、**Dev Containers: Rebuild Container**を実行してください。
 API起動時にDBマイグレーションが実行されます。Ctrl+CでAPIとViteを停止できます。
 
 | サービス | URL / 接続先 |
