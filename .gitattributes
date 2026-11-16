@@ -1,3 +1,2 @@
-.devcontainer/*.sh text eol=lf
 /mise.lock text eol=lf
 /.mise/locks/** text eol=lf

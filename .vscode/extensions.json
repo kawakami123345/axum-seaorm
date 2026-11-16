@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "hverlin.mise-vscode",
+    "esbenp.prettier-vscode",
+    "ms-ossdata.vscode-pgsql"
+  ]
+}

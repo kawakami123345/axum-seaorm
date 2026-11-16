@@ -1,4 +1,5 @@
 [settings]
+experimental = true
 lockfile = true
 
 [tools]
@@ -7,6 +8,45 @@ bun = "latest"
 node = "26"
 codex = "latest"
 orval = "latest"
+java = "temurin-25"
+postgres = "17"
+pitchfork = "2.34.0"
+"github:keycloak/keycloak" = { version = "26.8.2", asset_pattern = "keycloak-{{ version }}.zip" }
+
+[env]
+APP_URL = "http://localhost:3000"
+OIDC_CLIENT_ID = "rust_web"
+OIDC_CLIENT_SECRET = "supersecret123"
+OIDC_ISSUER_URL = "http://localhost:8080/realms/rust-web-realm"
+OIDC_LOGOUT_URL = "http://localhost:8080/realms/rust-web-realm/protocol/openid-connect/logout"
+KC_BOOTSTRAP_ADMIN_USERNAME = "admin"
+KC_BOOTSTRAP_ADMIN_PASSWORD = "admin"
+KC_HOSTNAME = "http://localhost:8080"
+KC_HTTP_HOST = "127.0.0.1"
+# Keep Keycloak's database in this checkout, independently of the installed tool.
+KC_DB_URL = "jdbc:h2:file:./.data/keycloak/keycloakdb;NON_KEYWORDS=VALUE"
+
+[daemons.postgres]
+preset = "postgres"
+version = "17"
+options.database = "rust_web_db"
+
+[daemons.keycloak]
+task = "_keycloak"
+# Wait for the imported realm, not just the HTTP port.
+ready_cmd = [
+    "node",
+    "-e",
+    "fetch('http://127.0.0.1:8080/realms/rust-web-realm/.well-known/openid-configuration', {signal: AbortSignal.timeout(2000)}).then(async r => process.exit(r.ok && (await r.json()).issuer === 'http://localhost:8080/realms/rust-web-realm' ? 0 : 1)).catch(() => process.exit(1))",
+]
+
+[tasks._keycloak]
+description = "Run the local Keycloak service"
+hide = true
+dir = "{{config_root}}"
+# Import without replacing an existing realm; Keycloak keeps its data between starts.
+run = ["kc.sh import --file config/keycloak/realm.json --override false", "kc.sh start-dev"]
+run_windows = ["kc.bat import --file config/keycloak/realm.json --override false", "kc.bat start-dev"]
 
 [tasks.setup]
 description = "Install frontend dependencies from the Bun lockfile"
@@ -32,6 +72,7 @@ depends = ["dev:backend", "dev:frontend"]
 description = "Start the API and apply database migrations"
 # Wait for client generation when both servers are requested; API-only runs do not need it.
 wait_for = ["orval"]
+daemons = ["postgres", "keycloak"]
 dir = "{{config_root}}"
 run = "cargo run --locked"
 
@@ -39,7 +80,7 @@ run = "cargo run --locked"
 description = "Start Vite on port 5173"
 depends = ["orval"]
 dir = "{{config_root}}/web"
-run = "bun run dev --host 0.0.0.0 --port 5173 --strictPort"
+run = "bun run dev --host 127.0.0.1 --port 5173 --strictPort"
 
 [tasks.check]
 description = "Check Rust and build the frontend"
@@ -66,6 +107,7 @@ run = "bun run test:browser"
 
 [tasks."test:database"]
 description = "Run PostgreSQL integration tests in isolated schemas"
+daemons = ["postgres"]
 dir = "{{config_root}}"
 run = "cargo test --locked --test postgres -- --include-ignored"
 

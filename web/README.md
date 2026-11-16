@@ -3,7 +3,7 @@
 React・TypeScript・Viteによるフロントエンドです。
 開発環境の構築は[ルートのREADME](../README.md)を参照してください。
 
-Dev Container内で、リポジトリのルートから実行します。
+ホストのターミナルで、リポジトリのルートから実行します。
 
 ```bash
 mise run dev:frontend
@@ -49,7 +49,7 @@ mise run test:browser
 ブラウザテストの初回は `web` で次のコマンドを実行してください。
 
 ```bash
-bun x playwright install --with-deps chromium --only-shell
+mise exec -- bunx playwright install chromium --only-shell
 ```
 
 ブラウザテストはポート4174で開発サーバーを自動起動し、API応答をモックします。Postgres・Keycloakの起動は不要です。

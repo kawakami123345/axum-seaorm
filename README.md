@@ -37,7 +37,7 @@ Chronoの直接依存はありませんが、SeaORMやOpenID Connectの間接依
 TypeScriptは `typescript-eslint` の対応範囲に合わせて6.0系、reqwestはOpenID Connectとの互換性のため0.12系を使います。
 
 `mise run dev`は、OpenAPIの書き出し・OrvalによるAPIクライアント生成・整形を済ませてから、
-APIとViteを並列で起動します。生成に失敗した場合はサーバーを起動しません。
+APIとViteを並列で起動します。生成に失敗した場合はAPIとViteを起動しません。
 `dev:frontend`・`check`・`test:frontend`・`test:browser`も、処理の前に同じ生成タスクを実行します。
 APIだけを起動する`dev:backend`ではクライアントを生成しません。
 Orvalのツール定義と生成コマンドは`mise.toml`で管理し、`web/package.json`には重複して定義しません。
@@ -49,77 +49,72 @@ Orvalのツール定義と生成コマンドは`mise.toml`で管理し、`web/pa
 Postgresとの日時の読み書きは、開発DBの接続情報を使って確認できます。永続データの書き込みは行いません。
 
 ```bash
-cargo test -p infra --features test postgres_timestamp_round_trip -- --ignored
+mise daemons start postgres
+mise exec -- cargo test -p infra --features test postgres_timestamp_round_trip -- --ignored
 ```
 
 ## 開発環境
 
-言語と開発コマンドはmise、開発コンテナとサーバーはDev Containerで管理します。
+開発用ツール、PostgreSQL、Keycloak、開発コマンドをmiseで管理し、ホスト上で実行します。
 
 | 設定 | 管理するもの |
 | --- | --- |
-| `mise.toml` | 言語・ツールのバージョンと設定、開発・検証コマンド |
+| `mise.toml` | ツール・サービスのバージョン、開発用の接続情報、開発・検証コマンド |
 | `mise.lock`・`.mise/locks/` | miseで解決したツールのバージョン・チェックサムと、Orvalの依存関係 |
-| `.devcontainer/devcontainer.json` | DB・OIDC接続用ENV（`remoteEnv`）、ポート転送、接続先、miseの導入、VS Code拡張 |
-| `.devcontainer/compose.yaml` | 各サーバー自身の起動設定、コンテナ間接続、起動待ち、データ永続化 |
-| `.devcontainer/post-create.sh` | キャッシュ用ボリュームの権限設定、ツール・フロントエンド依存のインストール |
-| `.devcontainer/keycloak/realm-export.json` | 開発用Realm・OIDCクライアント・ユーザー |
+| `config/keycloak/realm.json` | 初回にインポートする開発用Realm・OIDCクライアント・ユーザー |
+| `.vscode/` | VS Codeの推奨拡張とESLint設定 |
 
-アプリが参照するPostgres・Keycloakの接続情報は`devcontainer.json`の`remoteEnv`にまとめます。
-言語・ツール用のENVが必要になった場合は`mise.toml`で管理します。
-`POSTGRES_*`・`KC_*`は各サーバーコンテナの初期化・起動用なので、Compose側で指定します。
+サービスの管理にはmiseの実験的なdaemon機能とpitchforkを使います。PostgreSQLはmiseの
+プリセットで起動し、接続先の`DATABASE_URL`も自動設定されます。KeycloakはJavaとともに
+miseでインストールし、起動時にRealmをインポートします。設定は開発用です。
+ローカルだけの設定はGit管理外の`mise.local.toml`で上書きできます。
 
 `mise.toml`の`[settings] lockfile = true`により、`mise install`やツール更新時に`mise.lock`を
 自動生成・更新します。設定ファイルの編集だけでは生成されません。既存のlockfileがある場合は、
-`latest`や`26`という指定でも解決済みのバージョンを使います。
+`latest`や`26`、`17`という指定でも解決済みのバージョンを使います。
 対応する最新バージョンへ更新するときは`mise lock --bump`、続いて`mise install`を実行します。
-`mise.lock`と生成された`.mise/locks/`はGitで管理します。
-詳細は[mise公式のlockfileの説明](https://mise.jdx.dev/dev-tools/mise-lock.html)を参照してください。
-`Cargo.lock`・`web/bun.lock`はアプリの依存関係、`devcontainer-lock.json`はDev Container Featuresの
-固定用で、miseが管理するツールのlockfileとは別です。
-
-ソースコードはホストからbind mountし、`target/`・`web/node_modules/`は名前付きボリュームに
-分けています。ビルドや依存パッケージの読み書きはDocker側で行い、コンテナ再作成後も保持します。
-Cargoの`registry`・`git`キャッシュも個別のボリュームで保持します。
-この構成は[Dev Containers公式の推奨方法](https://code.visualstudio.com/remote/advancedcontainers/improve-performance)に沿っています。
-
-キャッシュ用ボリュームには`nocopy`を指定し、ホストにある既存の`target/`・`web/node_modules/`を
-初回にコピーしません。既存ディレクトリの内容は削除せず、コンテナ内ではボリュームが使われます。
-初回はフロントエンド依存を再インストールし、Rustのビルド成果物は次のビルドで生成します。
-ボリュームの権限は作成時に設定し、UID/GIDが変わった場合だけ既存キャッシュの所有者も更新します。
+`mise.lock`と生成された`.mise/locks/`はGitで管理します。`Cargo.lock`・`web/bun.lock`は
+アプリの依存関係を固定します。詳細は[miseのlockfileの説明](https://mise.jdx.dev/dev-tools/mise-lock.html)を参照してください。
 
 ## 起動
 
-ホストにはDocker Desktop、VS Code、Dev Containers拡張を用意します。
-WindowsではDocker DesktopをLinuxコンテナ / WSL 2で起動してください。
+ホストに[mise](https://mise.jdx.dev/getting-started.html)を用意します。daemon機能に対応する
+mise 2026.11.2以降を使ってください。WindowsではRustのビルドにVisual Studio Build Toolsの
+C++ツールとWindows SDKが必要です。LinuxではCコンパイラ、`pkg-config`、OpenSSLの開発用
+ライブラリが必要です。PostgreSQLは管理者権限では起動できないため、通常のユーザーで実行します。
+エディターや`mise exec`を使わないコマンドからもツールを使う場合は、miseの
+[シェル設定](https://mise.jdx.dev/faq.html#how-to-get-mise-working-with-my-ide)またはshimsを設定します。
 
-1. このリポジトリをVS Codeで開き、**Dev Containers: Reopen in Container**を実行します。
-2. 初回セットアップが終わったら、コンテナ内のターミナルで実行します。
+リポジトリのルートで以下を実行します。
 
-   ```bash
-   mise run dev
-   ```
+```bash
+mise trust
+mise install
+mise run setup
+mise run dev
+```
 
-PostgresとKeycloakはコンテナ作成時に自動起動します。初回セットアップでRust・Bun・Node.jsと
-フロントエンドの依存を自動インストールします。依存のインストールをやり直す場合は`mise run setup`を使います。
-miseのshimsを`remoteEnv.PATH`に追加しているため、ターミナルやVS Code拡張からもインストール済みのツールを使えます。
-このPATH設定の変更を反映するには、**Dev Containers: Rebuild Container**を実行してください。
-API起動時にDBマイグレーションが実行されます。Ctrl+CでAPIとViteを停止できます。
+`dev`はPostgreSQLとKeycloakの準備を待ってからAPIとViteを起動します。API起動時にはDBの
+マイグレーションを適用します。Ctrl+CでAPIとViteが停止します。PostgreSQLとKeycloakは
+再利用のため起動したままなので、不要になったら`mise daemons stop`で停止してください。
+`mise daemons status`で状態、`mise daemons logs keycloak`などでログを確認できます。
 
 | サービス | URL / 接続先 |
 | --- | --- |
 | フロントエンド | http://localhost:5173 |
 | API / Swagger UI | http://localhost:3000/swagger-ui/ |
 | Keycloak管理画面 | http://localhost:8080/admin/ |
-| Postgres（コンテナ内） | `postgres://user:password@postgres:5432/rust_web_db` |
+| PostgreSQL | `postgresql://postgres@127.0.0.1:5432/rust_web_db` |
 
-アプリとKeycloak管理画面の開発用ログインは、どちらも`admin` / `admin`です。
-設定中のパスワードやクライアントシークレットはローカル開発専用です。
+新規環境でのアプリとKeycloak管理画面のログインは、どちらも`admin` / `admin`です。
+PostgreSQLはローカル接続を信頼認証で受け付けます。設定中のパスワードやシークレットと
+あわせてローカル開発専用です。
 
-ポートは`devcontainer.json`から転送します。VS Codeの接続中に上記URLへアクセスできます。
-Postgresのホスト側接続先はVS Codeの「ポート」パネルで確認してください。
-作業用コンテナはKeycloakとネットワークを共有し、ブラウザとAPIでOIDC issuerの
-`http://localhost:8080`を一致させています。
+PostgreSQLのデータはmiseの状態ディレクトリに保存されます。`mise daemons ls --json`の
+`data_dir`で場所を確認できます。KeycloakのデータはGit管理外の`.data/keycloak/`に保存されます。
+サービスを停止しても両方のデータは残ります。Realmは既存の場合はインポートをスキップするため、
+定義変更後は管理画面から既存Realmを更新してください。PostgreSQLのメジャーバージョン変更時は
+既存データの移行が必要です。
 
 ## 開発コマンド
 
@@ -134,15 +129,41 @@ mise run check         # Rustのチェックとフロントエンドのビルド
 mise run test          # Rustワークスペースのテスト
 mise run test:frontend # フロントエンドの単体テスト
 mise run test:browser  # Chromiumで画面操作を検証
-mise run test:database # PostgreSQLの専用スキーマでDB操作・移行を検証
+mise run test:database # PostgreSQLを起動し、専用スキーマでDB操作・移行を検証
 ```
 
-`test:database`には起動済みPostgresと`DATABASE_URL`が必要です。
-各テストは一意なスキーマを作成し、終了時に削除します。既存の開発用テーブルは変更しません。
+`test:database`の各テストは一意なスキーマを作成し、終了時に削除します。
+既存の開発用テーブルは変更しません。
 
-`mise.toml`変更後は`mise install`を実行します。Dev Containerの設定変更後は
-**Dev Containers: Rebuild Container**を実行してください。
+## 以前のDev Containerからデータを移す
 
-DB・Keycloakの開発用データは名前付きボリュームに保存します。
-コンテナを閉じると各サービスは停止し、データは保持されます。
-Realmは初回のみインポートされるため、定義変更後は管理画面から既存Realmを更新してください。
+以前のDockerボリュームはそのまま残り、新しい環境へは自動で読み込まれません。
+必要な場合は、アプリとKeycloakを停止し、PostgreSQLの新しいDBが空のうちに移行してください。
+以下は以前のコンテナ名が残っている場合のPowerShellでの例です。すでに新環境にデータがある場合は、
+先にバックアップを取り、空のDBを用意してください。Keycloakの移行は同じ26.8.2のデータに限ります。
+
+```powershell
+if (Test-Path .data/keycloak/keycloakdb.mv.db) { throw 'Keycloakの移行先にデータがあります' }
+mise.exe daemons start postgres
+$taskTables = mise.exe exec -- psql -h 127.0.0.1 -p 5432 -U postgres -d rust_web_db -Atc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S')"
+if ($LASTEXITCODE -ne 0 -or [int]$taskTables -ne 0) { throw 'PostgreSQLの移行先が空ではないか接続できません' }
+
+mise.exe daemons stop keycloak
+docker stop axum-seaorm-dev-keycloak-1
+docker start axum-seaorm-dev-postgres-1
+docker exec axum-seaorm-dev-postgres-1 pg_dump -U user -d rust_web_db -Fc -f /tmp/rust-web.dump
+if ($LASTEXITCODE -ne 0) { throw '旧DBのダンプに失敗しました' }
+docker cp axum-seaorm-dev-postgres-1:/tmp/rust-web.dump "$env:TEMP/rust-web.dump"
+if ($LASTEXITCODE -ne 0) { throw 'ダンプのコピーに失敗しました' }
+docker stop axum-seaorm-dev-postgres-1
+
+mise.exe exec -- pg_restore --no-owner --no-acl --exit-on-error --single-transaction -h 127.0.0.1 -p 5432 -U postgres -d rust_web_db "$env:TEMP/rust-web.dump"
+if ($LASTEXITCODE -ne 0) { throw '新DBへの復元に失敗しました' }
+
+New-Item -ItemType Directory -Force .data/keycloak | Out-Null
+docker cp axum-seaorm-dev-keycloak-1:/opt/keycloak/data/h2/keycloakdb.mv.db .data/keycloak/keycloakdb.mv.db
+if ($LASTEXITCODE -ne 0) { throw 'Keycloakデータのコピーに失敗しました' }
+```
+
+移行後は`mise run dev`で起動します。以前のKeycloakに登録したユーザーと認証情報はそのまま使います。
+元のDockerボリュームは、移行を確認するまで削除せず保管してください。
