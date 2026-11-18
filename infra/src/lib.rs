@@ -11,6 +11,18 @@ pub mod publisher_history;
 pub mod session;
 pub mod shop;
 
+fn classify_name_error(error: DbErr, constraint: &str) -> anyhow::Error {
+    use sea_orm::RuntimeErr;
+    if let DbErr::Query(RuntimeErr::SqlxError(e)) | DbErr::Exec(RuntimeErr::SqlxError(e)) = &error
+        && let Some(db) = e.as_database_error()
+        && db.is_unique_violation()
+        && db.constraint() == Some(constraint)
+    {
+        return usecase::error::DuplicateName.into();
+    }
+    error.into()
+}
+
 #[cfg(test)]
 mod tests;
 

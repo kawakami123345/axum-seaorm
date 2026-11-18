@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
+const DUPLICATE_NAME: &str = "同じ名前の店舗がすでに登録されています。";
+
 pub struct Service {
     repo: Arc<dyn shop::Repository>,
 }
@@ -44,7 +46,7 @@ impl Service {
         self.repo
             .create(shop)
             .await
-            .map_err(|e| UseCaseError::database("create shop", e))
+            .map_err(|e| UseCaseError::name_write("create shop", DUPLICATE_NAME, e))
     }
 
     pub async fn update(
@@ -73,7 +75,7 @@ impl Service {
             .repo
             .update(shop)
             .await
-            .map_err(|e| UseCaseError::database("update shop", e))?;
+            .map_err(|e| UseCaseError::name_write("update shop", DUPLICATE_NAME, e))?;
         UseCaseError::check_write(updated)
     }
 

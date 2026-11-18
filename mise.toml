@@ -15,6 +15,7 @@ pitchfork = "2.34.0"
 
 [env]
 APP_URL = "http://localhost:3000"
+DEV_COOKIE_KEY_FILE = "{{config_root}}/.data/cookie.key"
 OIDC_CLIENT_ID = "rust_web"
 OIDC_CLIENT_SECRET = "supersecret123"
 OIDC_ISSUER_URL = "http://localhost:8080/realms/rust-web-realm"

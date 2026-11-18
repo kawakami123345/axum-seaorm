@@ -1,5 +1,7 @@
 import { Outlet, Link, NavLink } from "react-router";
+import { useState } from "react";
 import Icon from "../components/Icon";
+import { customFetch, getErrorMessage } from "../lib/custom-fetch";
 
 const navItems = [
   { name: "ダッシュボード", path: "/dashboard" },
@@ -32,8 +34,21 @@ function Navigation({ className }: { className: string }) {
 }
 
 const MainLayout = () => {
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const { data } = await customFetch<{ data: { redirect_url: string } }>(
+        "/logout",
+        { method: "POST" },
+      );
+      window.location.assign(data.redirect_url);
+    } catch (error) {
+      setLogoutError(`ログアウトに失敗しました。 ${getErrorMessage(error)}`);
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -70,6 +85,7 @@ const MainLayout = () => {
               </button>
               <button
                 onClick={handleLogout}
+                disabled={loggingOut}
                 className="text-text-sub hover:text-primary transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                 title="Logout"
                 aria-label="ログアウト"
@@ -89,6 +105,11 @@ const MainLayout = () => {
           </div>
         </div>
         <Navigation className="flex gap-6 overflow-x-auto px-4 pb-3 md:hidden" />
+        {logoutError && (
+          <p role="alert" className="px-4 pb-3 text-accent-red">
+            {logoutError}
+          </p>
+        )}
       </header>
 
       <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto w-full px-4 lg:px-8 py-10">

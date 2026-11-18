@@ -31,6 +31,8 @@ pub struct Model {
     pub user_id: Uuid,
     #[sea_orm(default_value = 0)]
     pub revision: i64,
+    #[sea_orm(default_value = false)]
+    pub applied_without_date: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -63,6 +65,7 @@ mod tests {
                 updated_by,
                 user_id,
                 revision,
+                applied_without_date,
             } = book;
 
             let Model {
@@ -85,6 +88,7 @@ mod tests {
                 updated_by: _,
                 user_id: _,
                 revision: _,
+                applied_without_date: _,
             } = history;
 
             // コンパイルエラーを防ぐために変数を使用
@@ -104,6 +108,7 @@ mod tests {
                 updated_by,
                 user_id,
                 revision,
+                applied_without_date,
             );
         }
     }

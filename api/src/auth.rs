@@ -1,10 +1,10 @@
 use anyhow::Context;
 use axum::{
-    Router,
-    extract::{Query, State},
+    Json, Router,
+    extract::{Query, State, rejection::QueryRejection},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
-    routing::get,
+    routing::{get, post},
 };
 
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
@@ -20,6 +20,7 @@ use openidconnect::{
     EmptyAdditionalClaims, EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
     RedirectUrl, RevocationErrorResponseType, Scope, StandardErrorResponse, TokenResponse,
     core::{CoreClient, CoreProviderMetadata, CoreResponseType},
+    url::Url,
 };
 
 pub type AppClient = openidconnect::Client<
@@ -53,6 +54,39 @@ pub struct AuthState {
     pub oidc_client: AppClient,
     pub cookie_key: tower_cookies::Key,
     pub http_client: reqwest::Client,
+    pub redirects: AuthRedirects,
+}
+
+#[derive(Clone)]
+pub struct AuthRedirects {
+    frontend: Url,
+    login: Url,
+    logout: Url,
+}
+
+impl AuthRedirects {
+    pub fn new(frontend: &str, logout: &str) -> anyhow::Result<Self> {
+        let frontend = Url::parse(frontend).context("Invalid FRONTEND_URL")?;
+        let mut login = frontend.clone();
+        login.set_query(None);
+        login.set_fragment(None);
+        login
+            .path_segments_mut()
+            .map_err(|_| anyhow::anyhow!("Invalid FRONTEND_URL"))?
+            .pop_if_empty()
+            .push("login");
+        Ok(Self {
+            frontend,
+            login,
+            logout: Url::parse(logout).context("Invalid OIDC_LOGOUT_URL")?,
+        })
+    }
+
+    fn login_error(&self, reason: &str) -> Response {
+        let mut url = self.login.clone();
+        url.query_pairs_mut().append_pair("error", reason);
+        Redirect::to(url.as_str()).into_response()
+    }
 }
 
 const NONCE_COOKIE_NAME: &str = "auth_nonce";
@@ -65,7 +99,7 @@ pub fn auth_router() -> Router<AuthState> {
     Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))
-        .route("/logout", get(logout))
+        .route("/logout", post(logout))
 }
 
 pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result<AppClient> {
@@ -76,6 +110,8 @@ pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result
     );
     let issuer_url =
         IssuerUrl::new(std::env::var("OIDC_ISSUER_URL").context("OIDC_ISSUER_URL must be set")?)?;
+    let app_url = std::env::var("APP_URL").context("APP_URL must be set")?;
+    let callback = RedirectUrl::new(format!("{}/callback", app_url.trim_end_matches('/')))?;
 
     let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, http_client)
         .await
@@ -84,13 +120,14 @@ pub async fn create_oidc_client(http_client: &reqwest::Client) -> anyhow::Result
     let client =
         CoreClient::from_provider_metadata(provider_metadata, client_id, Some(client_secret));
 
-    Ok(client)
+    Ok(client.set_redirect_uri(callback))
 }
 
 #[derive(Debug, Deserialize)]
 struct AuthRequest {
-    code: String,
-    state: String,
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,12 +175,6 @@ fn clear_session_cookie(cookies: &Cookies, key: &tower_cookies::Key) {
 async fn login(State(state): State<AuthState>, cookies: Cookies) -> impl IntoResponse {
     let client = &state.oidc_client;
 
-    let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
-    let redirect_url =
-        RedirectUrl::new(format!("{}/callback", app_url)).expect("Invalid redirect URL");
-
-    let client = client.clone().set_redirect_uri(redirect_url);
-
     let (auth_url, csrf_token, nonce) = client
         .authorize_url(
             AuthenticationFlow::<CoreResponseType>::AuthorizationCode,
@@ -183,37 +214,45 @@ async fn login(State(state): State<AuthState>, cookies: Cookies) -> impl IntoRes
 async fn callback(
     State(state): State<AuthState>,
     cookies: Cookies,
-    Query(params): Query<AuthRequest>,
+    params: Result<Query<AuthRequest>, QueryRejection>,
 ) -> impl IntoResponse {
     let client = &state.oidc_client;
     let cookie_key = &state.cookie_key;
+    let Ok(Query(params)) = params else {
+        return state.redirects.login_error("invalid_response");
+    };
 
     // 1. Validate Cookies & State
     let Some(nonce_cookie) = cookies.private(cookie_key).get(NONCE_COOKIE_NAME) else {
-        return Redirect::to("/login?error=missing_nonce").into_response();
+        return state.redirects.login_error("missing_nonce");
     };
     let nonce_str = nonce_cookie.value().to_string();
 
     let Some(state_cookie) = cookies.private(cookie_key).get(STATE_COOKIE_NAME) else {
-        return Redirect::to("/login?error=missing_state").into_response();
+        return state.redirects.login_error("missing_state");
     };
     let state_str = state_cookie.value().to_string();
 
-    if params.state != state_str {
-        return Redirect::to("/login?error=invalid_state").into_response();
+    if params.state.as_deref() != Some(state_str.as_str()) {
+        return state.redirects.login_error("invalid_state");
+    }
+    if let Some(error) = params.error {
+        return state.redirects.login_error(if error == "access_denied" {
+            "access_denied"
+        } else {
+            "provider_error"
+        });
     }
 
     // 2. Exchange Code for Token
-    let app_url = std::env::var("APP_URL").expect("APP_URL must be set");
-    let redirect_url =
-        RedirectUrl::new(format!("{}/callback", app_url)).expect("Invalid redirect URL");
-    let client = client.clone().set_redirect_uri(redirect_url);
-
-    let token_request = match client.exchange_code(AuthorizationCode::new(params.code)) {
+    let Some(code) = params.code else {
+        return state.redirects.login_error("invalid_response");
+    };
+    let token_request = match client.exchange_code(AuthorizationCode::new(code)) {
         Ok(r) => r,
         Err(e) => {
             error!(error = ?e, "Failed to create token request");
-            return Redirect::to("/login?error=internal_configuration_error").into_response();
+            return state.redirects.login_error("internal_configuration_error");
         }
     };
 
@@ -221,28 +260,29 @@ async fn callback(
         Ok(r) => r,
         Err(e) => {
             error!(error = ?e, "Token exchange failed");
-            return Redirect::to("/login?error=token_exchange_failed").into_response();
+            return state.redirects.login_error("token_exchange_failed");
         }
     };
 
     // 3. Verify ID Token & Claims
     let Some(id_token) = token_response.id_token() else {
-        return Redirect::to("/login?error=no_id_token").into_response();
+        return state.redirects.login_error("no_id_token");
     };
 
     let claims = match id_token.claims(&client.id_token_verifier(), &Nonce::new(nonce_str)) {
         Ok(c) => c,
         Err(e) => {
             error!(error = ?e, "ID token validation failed");
-            return Redirect::to("/login?error=invalid_token").into_response();
+            return state.redirects.login_error("invalid_token");
         }
     };
 
     let user_id = match claims.subject().as_str().parse::<uuid::Uuid>() {
-        Ok(user_id) => user_id,
+        Ok(user_id) if !user_id.is_nil() => user_id,
+        Ok(_) => return state.redirects.login_error("invalid_subject"),
         Err(error) => {
             error!(error = ?error, "OIDC subject is not a UUID");
-            return Redirect::to("/login?error=invalid_subject").into_response();
+            return state.redirects.login_error("invalid_subject");
         }
     };
 
@@ -258,7 +298,8 @@ async fn callback(
     if let Some(id) = session_id(&cookies, cookie_key)
         && let Err(error) = state.sessions.revoke(id).await
     {
-        return AppError(error).into_response();
+        error!(%error, "Failed to replace session");
+        return state.redirects.login_error("session_error");
     }
     let session = match state
         .sessions
@@ -266,7 +307,10 @@ async fn callback(
         .await
     {
         Ok(session) => session,
-        Err(error) => return AppError(error).into_response(),
+        Err(error) => {
+            error!(%error, "Failed to create session");
+            return state.redirects.login_error("session_error");
+        }
     };
 
     let mut session_cookie = Cookie::new(SESSION_COOKIE_NAME, session.id.to_string());
@@ -292,9 +336,7 @@ async fn callback(
     delete_state.set_max_age(Some(time::Duration::ZERO));
     cookies.private(cookie_key).remove(delete_state);
 
-    let frontend_url =
-        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
-    Redirect::to(&frontend_url).into_response()
+    Redirect::to(state.redirects.frontend.as_str()).into_response()
 }
 
 /// ログアウト: セッションCookieを削除し、Keycloakからもログアウトする
@@ -306,34 +348,11 @@ pub async fn logout(State(state): State<AuthState>, cookies: Cookies) -> impl In
     }
     clear_session_cookie(&cookies, &state.cookie_key);
 
-    // Logout logic
-    let client_id = state.oidc_client.client_id().to_string();
-    let logout_url_base = match std::env::var("OIDC_LOGOUT_URL") {
-        Ok(v) => v,
-        Err(_) => {
-            error!("OIDC_LOGOUT_URL must be set");
-            return Redirect::to("/login?error=internal_configuration_error").into_response();
-        }
-    };
-    let frontend_url =
-        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
-
-    let mut url = match openidconnect::url::Url::parse(&logout_url_base) {
-        Ok(u) => u,
-        Err(e) => {
-            error!(error = ?e, "Failed to parse logout url");
-            return Redirect::to("/login?error=internal_configuration_error").into_response();
-        }
-    };
-
+    let mut url = state.redirects.logout;
     url.query_pairs_mut()
-        .append_pair(
-            "post_logout_redirect_uri",
-            &format!("{}/login", frontend_url),
-        )
-        .append_pair("client_id", &client_id);
-
-    Redirect::to(url.as_str()).into_response()
+        .append_pair("post_logout_redirect_uri", state.redirects.login.as_str())
+        .append_pair("client_id", state.oidc_client.client_id().as_str());
+    Json(serde_json::json!({ "redirect_url": url.as_str() })).into_response()
 }
 
 /// CSRF ミドルウェア: ミューテートするリクエスト (POST, PUT, DELETE, PATCH) に対して CSRF トークンの検証を行う

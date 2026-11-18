@@ -30,6 +30,7 @@ export async function mockApi(page: Page) {
         shop: null,
         format: "Real",
         applied_at: null,
+        applied_without_date: false,
         revision: 0,
       },
     ] as BookResponseDto[],
@@ -39,7 +40,7 @@ export async function mockApi(page: Page) {
     publisherUpdates: [] as PublisherUpdateDto[],
     appliedWrites: [] as BookChangeAppliedAtDto[],
     holdBookSave: undefined as Promise<void> | undefined,
-    failNextPublisherSave: false,
+    failPublishers: false,
     failSummary: false,
     holdSummary: undefined as Promise<void> | undefined,
     failBooks: false,
@@ -64,8 +65,10 @@ export async function mockApi(page: Page) {
           });
         return route.fulfill({ json: state.books });
       }
-      if (path === "/publishers" && method === "GET")
+      if (path === "/publishers" && method === "GET") {
+        if (state.failPublishers) return route.fulfill({ status: 500 });
         return route.fulfill({ json: state.publishers });
+      }
       if (path === "/shops" && method === "GET") {
         if (state.failShops)
           return route.fulfill({
@@ -117,6 +120,7 @@ export async function mockApi(page: Page) {
           shop: data.shop_id ? shop : null,
           format: data.format ?? "Real",
           applied_at: null,
+          applied_without_date: false,
           revision: 0,
         });
         return route.fulfill({ status: 204 });
@@ -136,6 +140,7 @@ export async function mockApi(page: Page) {
           });
         }
         book.applied_at = data.applied_at ?? null;
+        book.applied_without_date = false;
         book.revision += 1;
         return route.fulfill({ json: book });
       }
@@ -177,14 +182,13 @@ export async function mockApi(page: Page) {
         return route.fulfill({ status: 204 });
       }
       if (path === "/publishers" && method === "POST") {
-        if (state.failNextPublisherSave) {
-          state.failNextPublisherSave = false;
+        const { name } = request.postDataJSON() as { name: string };
+        if (state.publishers.some((item) => item.name === name)) {
           return route.fulfill({
             status: 400,
-            json: { error: "Publisher name already exists" },
+            json: { error: "同じ名前の出版社がすでに登録されています。" },
           });
         }
-        const { name } = request.postDataJSON() as { name: string };
         state.publishers.push({
           pub_id: "55555555-5555-4555-8555-555555555555",
           name,

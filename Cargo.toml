@@ -30,6 +30,7 @@ migration = { workspace = true }
 tracing-subscriber = { workspace = true }
 tower-cookies = { workspace = true }
 reqwest = { workspace = true }
+tempfile = "3.27"
 
 
 [dev-dependencies]

@@ -8,6 +8,16 @@ use crate::DomainError;
 pub struct BookTitle(String);
 
 impl BookTitle {
+    /// Earlier versions accepted titles up to 128 characters.
+    pub fn from_storage(title: String) -> Result<Self, DomainError> {
+        if title.chars().count() > 128 {
+            return Err(DomainError::InvalidFormat(
+                "Stored title exceeds 128 characters".into(),
+            ));
+        }
+        Ok(Self(title))
+    }
+
     pub fn new(title: String) -> Result<Self, DomainError> {
         if title.chars().count() > 32 {
             return Err(DomainError::InvalidFormat(

@@ -17,6 +17,7 @@ use crate::error::AppError;
     request_body = CreateDto,
     responses(
         (status = 204, description = "Shop created successfully"),
+        (status = 400, description = "Invalid or duplicate shop name"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -80,6 +81,7 @@ pub async fn get_shop(
     ),
     responses(
         (status = 204, description = "Shop updated successfully"),
+        (status = 400, description = "Invalid or duplicate shop name"),
         (status = 409, description = "Shop changed since it was loaded"),
         (status = 404, description = "Shop not found"),
         (status = 500, description = "Internal server error")

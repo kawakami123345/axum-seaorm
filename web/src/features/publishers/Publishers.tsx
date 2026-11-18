@@ -2,6 +2,7 @@ import { useGetAllPublishers } from "../../api/endpoints/publisher/publisher";
 import type { PublisherResponseDto, PublisherCreateDto } from "../../api/model";
 import PageHeader from "../../components/PageHeader";
 import PageStatus from "../../components/PageStatus";
+import RequestStatus from "../../components/RequestStatus";
 import { useEditor } from "../../hooks/useEditor";
 import BudgetSummary from "../budget/BudgetSummary";
 import PublisherModal from "./PublisherModal";
@@ -10,9 +11,9 @@ import { usePublisherMutations } from "./usePublisherMutations";
 
 export default function Publishers() {
   const {
-    data: publishers = [],
+    data: publishers,
     isPending,
-    error,
+    isRefetchError,
     refetch,
     isFetching,
   } = useGetAllPublishers({
@@ -33,7 +34,7 @@ export default function Publishers() {
     editor.close();
   };
 
-  if (isPending || error) {
+  if (publishers === undefined) {
     return (
       <PageStatus
         status={isPending ? "loading" : "error"}
@@ -53,6 +54,14 @@ export default function Publishers() {
             createLabel="出版社を追加"
             onCreate={editor.openCreate}
           />
+          {isRefetchError && (
+            <RequestStatus
+              status="error"
+              message="出版社一覧を更新できませんでした。前回の一覧を表示しています。"
+              onRetry={() => void refetch()}
+              isRetrying={isFetching}
+            />
+          )}
           <PublisherTable publishers={publishers} onEdit={editor.openEdit} />
         </div>
       </main>

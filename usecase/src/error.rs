@@ -1,5 +1,9 @@
 use thiserror::Error;
 
+#[derive(Debug, Error)]
+#[error("Name already exists")]
+pub struct DuplicateName;
+
 #[derive(Error, Debug)]
 pub enum UseCaseError {
     #[error("Entity not found")]
@@ -21,6 +25,18 @@ pub enum UseCaseError {
 }
 
 impl UseCaseError {
+    pub(crate) fn name_write(
+        operation: &str,
+        duplicate_message: &str,
+        error: anyhow::Error,
+    ) -> Self {
+        if error.is::<DuplicateName>() {
+            Self::DomainRuleViolation(duplicate_message.into())
+        } else {
+            Self::database(operation, error)
+        }
+    }
+
     pub(crate) fn check_revision(expected: i64, current: i64) -> Result<(), Self> {
         if expected < 0 || expected == i64::MAX {
             return Err(Self::DomainRuleViolation("Invalid revision".into()));

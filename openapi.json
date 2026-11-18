@@ -313,6 +313,9 @@
         "responses": {
           "204": {
             "description": "Publisher created successfully"
+          },
+          "400": {
+            "description": "Invalid or duplicate publisher name"
           }
         }
       }
@@ -381,6 +384,9 @@
         "responses": {
           "204": {
             "description": "Publisher updated successfully"
+          },
+          "400": {
+            "description": "Invalid or duplicate publisher name"
           },
           "404": {
             "description": "Publisher not found"
@@ -475,6 +481,9 @@
           "204": {
             "description": "Shop created successfully"
           },
+          "400": {
+            "description": "Invalid or duplicate shop name"
+          },
           "500": {
             "description": "Internal server error"
           }
@@ -548,6 +557,9 @@
         "responses": {
           "204": {
             "description": "Shop updated successfully"
+          },
+          "400": {
+            "description": "Invalid or duplicate shop name"
           },
           "404": {
             "description": "Shop not found"
@@ -702,6 +714,10 @@
               "null"
             ],
             "example": "2024-01-01T00:00:00Z"
+          },
+          "applied_without_date": {
+            "type": "boolean",
+            "description": "An application recorded by the original system without a date."
           },
           "author": {
             "type": "string"

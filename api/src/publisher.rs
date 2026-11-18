@@ -54,7 +54,8 @@ pub async fn get(
     operation_id = "create_publisher",
     request_body =  usecase::publisher::CreateDto,
     responses(
-        (status = 204, description = "Publisher created successfully")
+        (status = 204, description = "Publisher created successfully"),
+        (status = 400, description = "Invalid or duplicate publisher name")
     )
 )]
 pub async fn create(
@@ -76,6 +77,7 @@ pub async fn create(
     request_body = usecase::publisher::UpdateDto,
     responses(
         (status = 204, description = "Publisher updated successfully"),
+        (status = 400, description = "Invalid or duplicate publisher name"),
         (status = 409, description = "Publisher changed since it was loaded"),
         (status = 404, description = "Publisher not found")
     ),

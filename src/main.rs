@@ -2,12 +2,18 @@ use api::{AppState, create_router};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::Database;
 use std::sync::Arc;
+mod cookie_key;
 mod test;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 0. Load .env
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
+    let cookie_key = cookie_key::load()?;
+    let redirects = api::auth::AuthRedirects::new(
+        &std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".into()),
+        &std::env::var("OIDC_LOGOUT_URL")?,
+    )?;
 
     // 1. Database Connection
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -41,10 +47,6 @@ async fn main() -> anyhow::Result<()> {
     // OIDC Client
     let oidc_client = api::auth::create_oidc_client(&http_client).await?;
 
-    let cookie_key = std::env::var("COOKIE_KEY")
-        .map(|s| tower_cookies::Key::derive_from(s.as_bytes()))
-        .unwrap_or_else(|_| tower_cookies::Key::generate());
-
     let state = Arc::new(AppState {
         book_usecase,
         publisher_usecase,
@@ -55,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
             oidc_client,
             cookie_key,
             http_client,
+            redirects,
         },
     });
 

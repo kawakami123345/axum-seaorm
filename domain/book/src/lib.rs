@@ -8,12 +8,20 @@ pub mod vo;
 #[async_trait]
 pub trait Repository: Sync + Send {
     async fn find_all(&self, filter: ListFilter) -> anyhow::Result<Vec<Book>>;
+    async fn annual_totals(&self, filter: ListFilter) -> anyhow::Result<Vec<AnnualTotals>>;
     async fn find_by_pub_id(&self, pub_id: Uuid) -> anyhow::Result<Option<Book>>;
     async fn create(&self, item: Book) -> anyhow::Result<()>;
     /// Returns false when the stored revision no longer matches the loaded book.
     async fn update(&self, item: Book) -> anyhow::Result<bool>;
     /// Returns false when the record was updated or deleted after it was loaded.
     async fn delete(&self, item: Book, deleted_by: Uuid) -> anyhow::Result<bool>;
+}
+
+#[derive(Debug, PartialEq)]
+pub struct AnnualTotals {
+    pub year: i32,
+    pub count: i64,
+    pub total_amount: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +34,7 @@ impl ListFilter {
     pub fn matches(&self, book: &Book) -> bool {
         match self {
             Self::All => true,
-            Self::OwnedBy(user_id) => book.user_id() == user_id,
+            Self::OwnedBy(user_id) => !user_id.is_nil() && book.user_id() == user_id,
         }
     }
 }
@@ -41,6 +49,8 @@ pub struct Book {
     shop: Option<shop::Shop>,
     #[serde(default, with = "time::serde::rfc3339::option")]
     applied_at: Option<time::OffsetDateTime>,
+    #[serde(default)]
+    applied_without_date: bool,
     format: vo::BookFormat,
     price: vo::BookPrice,
     #[serde(with = "time::serde::rfc3339")]
@@ -75,6 +85,7 @@ impl Book {
             publisher,
             shop,
             applied_at: None,
+            applied_without_date: false,
             format,
             price,
             created_at: now,
@@ -95,6 +106,7 @@ impl Book {
         publisher: publisher::Publisher,
         shop: Option<shop::Shop>,
         applied_at: Option<time::OffsetDateTime>,
+        applied_without_date: bool,
         format: vo::BookFormat,
         price: vo::BookPrice,
         created_at: time::OffsetDateTime,
@@ -112,6 +124,7 @@ impl Book {
             publisher,
             shop,
             applied_at,
+            applied_without_date,
             format,
             price,
             created_at,
@@ -143,6 +156,9 @@ impl Book {
     }
     pub fn applied_at(&self) -> Option<time::OffsetDateTime> {
         self.applied_at
+    }
+    pub fn applied_without_date(&self) -> bool {
+        self.applied_without_date
     }
     pub fn format(&self) -> vo::BookFormat {
         self.format
@@ -185,7 +201,7 @@ impl Book {
         price: vo::BookPrice,
         updated_by: Uuid,
     ) -> Result<(), DomainError> {
-        if self.applied_at.is_some() {
+        if self.applied_at.is_some() || self.applied_without_date {
             return Err(DomainError::DomainRuleViolation(
                 "Cannot update a book that is already applied.".to_string(),
             ));
@@ -216,6 +232,7 @@ impl Book {
             })
             .transpose()?;
         self.applied_at = applied_at;
+        self.applied_without_date = false;
         self.update_audit(updated_by);
         Ok(())
     }

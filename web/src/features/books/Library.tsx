@@ -2,6 +2,7 @@ import { useGetAllBooks } from "../../api/endpoints/book/book";
 import type { BookResponseDto, BookCreateDto } from "../../api/model";
 import PageHeader from "../../components/PageHeader";
 import PageStatus from "../../components/PageStatus";
+import RequestStatus from "../../components/RequestStatus";
 import { useEditor } from "../../hooks/useEditor";
 import { getErrorMessage } from "../../lib/custom-fetch";
 import { parseAppliedDate } from "../../lib/format";
@@ -12,9 +13,9 @@ import { useBookMutations } from "./useBookMutations";
 
 export default function Library() {
   const {
-    data: books = [],
+    data: books,
     isPending,
-    error,
+    isRefetchError,
     refetch,
     isFetching,
   } = useGetAllBooks({
@@ -58,7 +59,7 @@ export default function Library() {
     );
   };
 
-  if (isPending || error) {
+  if (books === undefined) {
     return (
       <PageStatus
         status={isPending ? "loading" : "error"}
@@ -78,6 +79,14 @@ export default function Library() {
             createLabel="書籍を追加"
             onCreate={editor.openCreate}
           />
+          {isRefetchError && (
+            <RequestStatus
+              status="error"
+              message="書籍一覧を更新できませんでした。前回の一覧を表示しています。"
+              onRetry={() => void refetch()}
+              isRetrying={isFetching}
+            />
+          )}
           <div className="flex gap-4 border-b border-border-color dark:border-gray-700">
             <button
               type="button"
@@ -100,7 +109,7 @@ export default function Library() {
           </div>
           <BookTable
             books={books}
-            onEdit={editor.openEdit}
+            onSelect={editor.openEdit}
             onApply={handleApply}
             isApplying={changeAppliedAt.isPending}
           />

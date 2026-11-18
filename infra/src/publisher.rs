@@ -90,7 +90,8 @@ impl publisher::Repository for SqlRepository {
             .set_updated_by(*item.updated_by())
             .set_revision(item.revision())
             .insert(&txn)
-            .await?;
+            .await
+            .map_err(|e| crate::classify_name_error(e, "publisher_name_key"))?;
 
         txn.commit().await?;
         Ok(())
@@ -114,7 +115,8 @@ impl publisher::Repository for SqlRepository {
             .filter(Column::PubId.eq(item.pub_id()))
             .filter(Column::Revision.eq(item.revision()))
             .exec(&txn)
-            .await?;
+            .await
+            .map_err(|e| crate::classify_name_error(e, "publisher_name_key"))?;
 
         txn.commit().await?;
         Ok(result.rows_affected == 1)

@@ -76,6 +76,7 @@ fn fixture() -> (AuthState, Arc<MemoryRepository>) {
         ),
         cookie_key: tower_cookies::Key::generate(),
         http_client: reqwest::Client::new(),
+        redirects: AuthRedirects::new("http://frontend.test", "http://issuer.test/logout").unwrap(),
     };
     (state, repo)
 }
@@ -91,6 +92,7 @@ fn app(state: AuthState) -> Router {
             require_auth,
         ))
         .merge(auth_router())
+        .layer(axum::middleware::from_fn(csrf_layer))
         .layer(CookieManagerLayer::new())
         .with_state(state)
 }
@@ -103,15 +105,26 @@ fn cookie(state: &AuthState, value: String) -> String {
 }
 
 async fn get_response(app: Router, path: &str, cookie: &str) -> Response {
-    app.oneshot(
-        Request::builder()
-            .uri(path)
-            .header("Cookie", cookie)
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await
-    .unwrap()
+    request(app, "GET", path, cookie, None).await
+}
+
+async fn request(
+    app: Router,
+    method: &str,
+    path: &str,
+    cookie: &str,
+    csrf: Option<&str>,
+) -> Response {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("Cookie", format!("{cookie}; csrf_token=test"));
+    if let Some(csrf) = csrf {
+        builder = builder.header(CSRF_HEADER_NAME, csrf);
+    }
+    app.oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -193,8 +206,35 @@ async fn logout_revokes_copied_cookies_and_keeps_other_sessions_active() {
     let other_cookie = cookie(&state, other_session.id.to_string());
     let router = app(state);
 
-    let response = get_response(router.clone(), "/logout", &saved_cookie).await;
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        get_response(router.clone(), "/logout", &saved_cookie)
+            .await
+            .status(),
+        StatusCode::METHOD_NOT_ALLOWED
+    );
+    for token in [None, Some("mismatch")] {
+        assert_eq!(
+            request(router.clone(), "POST", "/logout", &saved_cookie, token)
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        get_response(router.clone(), "/protected", &saved_cookie)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let response = request(
+        router.clone(),
+        "POST",
+        "/logout",
+        &saved_cookie,
+        Some("test"),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
     assert!(
         response
             .headers()
@@ -203,6 +243,16 @@ async fn logout_revokes_copied_cookies_and_keeps_other_sessions_active() {
             .to_str()
             .unwrap()
             .contains("Max-Age=0")
+    );
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let url = Url::parse(body["redirect_url"].as_str().unwrap()).unwrap();
+    assert_eq!(url.host_str(), Some("issuer.test"));
+    assert!(
+        url.query_pairs()
+            .any(|(k, v)| k == "post_logout_redirect_uri" && v == "http://frontend.test/login")
     );
     assert_eq!(
         get_response(router.clone(), "/protected", &saved_cookie)
@@ -239,7 +289,14 @@ async fn storage_failures_are_server_errors_and_failed_logout_can_be_retried() {
     repo.fail_reads.store(false, Ordering::SeqCst);
 
     repo.fail_revokes.store(true, Ordering::SeqCst);
-    let response = get_response(router.clone(), "/logout", &saved_cookie).await;
+    let response = request(
+        router.clone(),
+        "POST",
+        "/logout",
+        &saved_cookie,
+        Some("test"),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert!(response.headers().get("set-cookie").is_none());
     assert_eq!(
@@ -251,10 +308,16 @@ async fn storage_failures_are_server_errors_and_failed_logout_can_be_retried() {
 
     repo.fail_revokes.store(false, Ordering::SeqCst);
     assert_eq!(
-        get_response(router.clone(), "/logout", &saved_cookie)
-            .await
-            .status(),
-        StatusCode::SEE_OTHER
+        request(
+            router.clone(),
+            "POST",
+            "/logout",
+            &saved_cookie,
+            Some("test")
+        )
+        .await
+        .status(),
+        StatusCode::OK
     );
     assert_eq!(
         get_response(router, "/protected", &saved_cookie)
@@ -262,4 +325,36 @@ async fn storage_failures_are_server_errors_and_failed_logout_can_be_retried() {
             .status(),
         StatusCode::UNAUTHORIZED
     );
+}
+
+#[tokio::test]
+async fn callback_errors_return_to_the_frontend_login_page() {
+    let (state, _) = fixture();
+    let mut jar = CookieJar::new();
+    for name in [STATE_COOKIE_NAME, NONCE_COOKIE_NAME] {
+        jar.private_mut(&state.cookie_key)
+            .add(Cookie::new(name, "test"));
+    }
+    let cookies = format!(
+        "{}; {}",
+        jar.get(STATE_COOKIE_NAME).unwrap(),
+        jar.get(NONCE_COOKIE_NAME).unwrap()
+    );
+    let router = app(state);
+    for (path, cookie, reason) in [
+        ("/callback?code=test&state=test", "", "missing_nonce"),
+        (
+            "/callback?error=access_denied&state=test",
+            cookies.as_str(),
+            "access_denied",
+        ),
+        ("/callback?state=test", cookies.as_str(), "invalid_response"),
+    ] {
+        let response = get_response(router.clone(), path, cookie).await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            response.headers()["location"],
+            format!("http://frontend.test/login?error={reason}")
+        );
+    }
 }

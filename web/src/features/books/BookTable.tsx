@@ -6,21 +6,21 @@ import { formatDate, formatYen } from "../../lib/format";
 const columns: readonly TableColumn[] = [
   { label: "書籍タイトル", className: "w-[35%]" },
   { label: "著者", className: "w-[20%] hidden sm:table-cell" },
-  { label: "購入日", className: "w-[15%] hidden md:table-cell" },
+  { label: "申請日", className: "w-[15%] hidden md:table-cell" },
   { label: "経費申請", className: "w-[15%] text-center" },
   { label: "価格", className: "w-[15%] text-right" },
 ];
 
 interface BookTableProps {
   books: readonly BookResponseDto[];
-  onEdit: (book: BookResponseDto) => void;
+  onSelect: (book: BookResponseDto) => void;
   onApply: (book: BookResponseDto) => void;
   isApplying: boolean;
 }
 
 export default function BookTable({
   books,
-  onEdit,
+  onSelect,
   onApply,
   isApplying,
 }: BookTableProps) {
@@ -36,7 +36,7 @@ export default function BookTable({
         <BookRow
           key={book.pub_id}
           book={book}
-          onEdit={onEdit}
+          onSelect={onSelect}
           onApply={onApply}
           isApplying={isApplying}
         />
@@ -47,14 +47,14 @@ export default function BookTable({
 
 function BookRow({
   book,
-  onEdit,
+  onSelect,
   onApply,
   isApplying,
 }: Omit<BookTableProps, "books"> & { book: BookResponseDto }) {
-  const isPending = !book.applied_at;
+  const isPending = !book.applied_at && !book.applied_without_date;
   return (
     <tr
-      onClick={() => onEdit(book)}
+      onClick={() => onSelect(book)}
       className={`group cursor-pointer transition-all ${isPending ? "row-highlight-pending hover:bg-amber-100 dark:hover:bg-amber-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}
     >
       <td className="px-6 py-4">
@@ -68,10 +68,10 @@ function BookRow({
             )}
             <button
               type="button"
-              aria-label={`書籍「${book.title}」を編集`}
+              aria-label={`書籍「${book.title}」${isPending ? "を編集" : "の詳細を表示"}`}
               onClick={(event) => {
                 event.stopPropagation();
-                onEdit(book);
+                onSelect(book);
               }}
               className="text-left text-text-main dark:text-white text-sm font-bold leading-normal group-hover:text-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-4 rounded-sm"
             >
@@ -87,7 +87,11 @@ function BookRow({
         {book.author}
       </td>
       <td className="px-6 py-4 text-sm text-text-sub dark:text-gray-400 hidden md:table-cell">
-        {book.applied_at ? formatDate(book.applied_at) : "-"}
+        {book.applied_at
+          ? formatDate(book.applied_at)
+          : book.applied_without_date
+            ? "日付不明"
+            : "-"}
       </td>
       <td className="px-6 py-4 text-center">
         <div className="flex items-center justify-center gap-2">
@@ -110,6 +114,7 @@ function BookRow({
               <span className="text-xs font-bold text-text-main dark:text-gray-300">
                 申請済
               </span>
+              <span className="text-xs text-text-sub">閲覧のみ</span>
             </>
           )}
         </div>

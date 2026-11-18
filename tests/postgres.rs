@@ -6,7 +6,7 @@ use migration::{Migrator, MigratorTrait};
 use publisher::Repository as _;
 use sea_orm::{
     ColumnTrait, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend,
-    EntityTrait, QueryFilter, Statement,
+    EntityTrait, QueryFilter, Statement, TransactionTrait,
 };
 use shop::Repository as _;
 use time::OffsetDateTime;
@@ -21,19 +21,24 @@ where
     F: FnOnce(DatabaseConnection) -> Fut,
     Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
 {
+    with_connections(1, test).await
+}
+
+async fn with_connections<F, Fut>(connections: u32, test: F) -> anyhow::Result<()>
+where
+    F: FnOnce(DatabaseConnection) -> Fut,
+    Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    let schema = format!("test_{}", Uuid::new_v4().simple());
     let mut options = ConnectOptions::new(std::env::var("DATABASE_URL")?);
     options
-        .max_connections(1)
-        .min_connections(1)
+        .max_connections(connections)
+        .min_connections(connections)
+        .set_schema_search_path(schema.clone())
         .acquire_timeout(Duration::from_secs(3))
         .sqlx_logging(false);
     let db = Database::connect(options).await?;
-    let schema = format!("test_{}", Uuid::new_v4().simple());
     db.execute_unprepared(&format!("CREATE SCHEMA {schema}"))
-        .await?;
-    // Exclude public so migration metadata and application queries cannot
-    // resolve to an existing development table when a test table is absent.
-    db.execute_unprepared(&format!("SET search_path TO {schema}"))
         .await?;
 
     let result = tokio::spawn(test(db.clone())).await;
@@ -56,6 +61,247 @@ async fn create_publisher(db: &DatabaseConnection) -> anyhow::Result<publisher::
     let pub_id = item.pub_id();
     repo.create(item).await?;
     Ok(repo.find_by_pub_id(pub_id).await?.unwrap())
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
+async fn upgrades_original_books_and_publishers() -> anyhow::Result<()> {
+    with_database(|db| async move {
+        db.execute_unprepared(include_str!("fixtures/591ee80.sql"))
+            .await?;
+        db.execute_unprepared(
+            "INSERT INTO publisher (pub_id, name) VALUES
+                 (gen_random_uuid(), 'Original'), (gen_random_uuid(), 'Original');
+             INSERT INTO book (pub_id, title, author, publisher_id, status, price) VALUES
+                 (gen_random_uuid(), repeat('本', 128), 'Author', 2, 'Applied', 3000),
+                 (gen_random_uuid(), 'Pending', 'Author', 1, 'Unapplied', 1000)",
+        )
+        .await?;
+        Migrator::up(&db, None).await?;
+        let books = infra::book::SqlRepository::new(db.clone());
+        let owner = Uuid::new_v4();
+        for id in [owner, Uuid::nil()] {
+            let visible = books.find_all(book::ListFilter::OwnedBy(id)).await?;
+            assert!(visible.is_empty());
+        }
+        let all = books.find_all(book::ListFilter::All).await?;
+        assert_eq!(all.len(), 2);
+        assert!(!all[0].applied_without_date());
+        let mut applied = all[1].clone();
+        assert_eq!(applied.title(), "本".repeat(128));
+        assert_eq!(applied.publisher().id(), 2);
+        assert!(applied.applied_without_date());
+        assert!(applied.applied_at().is_none());
+        assert!(books.annual_totals(book::ListFilter::All).await?.is_empty());
+        applied.change_applied_at(Some(OffsetDateTime::now_utc()), owner)?;
+        assert!(books.update(applied).await?);
+        let history = infra::book_history::Entity::find().one(&db).await?.unwrap();
+        assert_eq!(history.title, "本".repeat(128));
+        assert_eq!(history.operation_by, owner);
+        assert!(!history.applied_without_date);
+        assert_eq!(history.revision, 1);
+
+        let masters = infra::publisher::SqlRepository::new(db.clone());
+        let mut originals = masters.find_all().await?;
+        assert_eq!(originals.len(), 2);
+        let mut first = originals.pop().unwrap();
+        first.update(publisher::vo::PublisherName::new("Renamed".into())?, owner)?;
+        assert!(masters.update(first).await?);
+        let duplicate = publisher::Publisher::new(
+            Uuid::new_v4(),
+            publisher::vo::PublisherName::new("Original".into())?,
+            owner,
+        );
+        let error = masters.create(duplicate).await.unwrap_err();
+        assert!(error.is::<usecase::error::DuplicateName>());
+        let renamed = infra::publisher_history::Entity::find()
+            .one(&db)
+            .await?
+            .unwrap();
+        assert_eq!(renamed.name, "Renamed");
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
+async fn duplicate_master_names_are_client_errors_for_create_and_rename() -> anyhow::Result<()> {
+    use axum::{http::StatusCode, response::IntoResponse};
+    use usecase::{error::UseCaseError, publisher as publishers, shop as shops};
+
+    with_database(|db| async move {
+        Migrator::up(&db, None).await?;
+        let ctx = UserContext::new(Uuid::new_v4(), vec![]);
+        let publisher_repo = infra::publisher::SqlRepository::new(db.clone());
+        let publishers = publishers::Service::new(Arc::new(publisher_repo));
+        let shops = shops::Service::new(Arc::new(infra::shop::SqlRepository::new(db)));
+        for name in ["First", "Second"] {
+            publishers
+                .create(&ctx, publishers::CreateDto { name: name.into() })
+                .await?;
+            shops.create(&ctx, shops::CreateDto { name: name.into() })
+                .await?;
+        }
+        let publisher = publishers.get_all().await?.remove(0);
+        let shop = shops.get_all().await?.remove(0);
+        let publisher_rename = publishers::UpdateDto {
+            name: "First".into(),
+            revision: publisher.revision,
+        };
+        let shop_rename = shops::UpdateDto {
+            name: "First".into(),
+            revision: shop.revision,
+        };
+        let failures = [
+            publishers.create(&ctx, publishers::CreateDto { name: "First".into() }).await,
+            publishers.update(&ctx, publisher.pub_id, publisher_rename).await,
+            shops.create(&ctx, shops::CreateDto { name: "First".into() }).await,
+            shops.update(&ctx, shop.pub_id, shop_rename).await,
+        ];
+        for failure in failures {
+            let error = failure.unwrap_err();
+            assert!(matches!(&error, UseCaseError::DomainRuleViolation(msg) if msg.contains("すでに登録")));
+            let response = api::error::AppError(error).into_response();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
+async fn preserves_pre_oidc_history_and_actor_names() -> anyhow::Result<()> {
+    with_database(|db| async move {
+        db.execute_unprepared(include_str!("fixtures/591ee80.sql"))
+            .await?;
+        db.execute_unprepared(include_str!("fixtures/pre_oidc_history.sql"))
+            .await?;
+        Migrator::up(&db, None).await?;
+
+        let original = infra::book_history::Entity::find().one(&db).await?.unwrap();
+        assert_eq!(original.history_id, 1);
+        assert!(original.applied_without_date);
+        assert_eq!(original.created_by, Uuid::from_u128(1));
+        assert!(original.user_id.is_nil());
+        let row = db
+            .query_one_raw(Statement::from_string(
+                DbBackend::Postgres,
+                "SELECT legacy_updated_by FROM book_history WHERE history_id = 1",
+            ))
+            .await?
+            .unwrap();
+        assert_eq!(
+            row.try_get::<String>("", "legacy_updated_by")?,
+            "old operator"
+        );
+
+        let books = infra::book::SqlRepository::new(db.clone());
+        let mut book = books.find_by_pub_id(original.pub_id).await?.unwrap();
+        book.change_applied_at(None, Uuid::new_v4())?;
+        assert!(books.update(book).await?);
+        let updated = infra::book_history::Entity::find_by_id(2)
+            .one(&db)
+            .await?
+            .unwrap();
+        assert_eq!(updated.pub_id, original.pub_id);
+        assert!(!updated.applied_without_date);
+        let book = books.find_by_pub_id(original.pub_id).await?.unwrap();
+        assert!(books.delete(book, Uuid::new_v4()).await?);
+        let deleted = infra::book_history::Entity::find_by_id(3)
+            .one(&db)
+            .await?
+            .unwrap();
+        assert_eq!(deleted.operation_type, "DELETE");
+        assert_eq!(deleted.pub_id, original.pub_id);
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
+async fn upgrades_a_database_already_using_revision_guards() -> anyhow::Result<()> {
+    with_database(|db| async move {
+        Migrator::up(&db, None).await?;
+        let original = create_publisher(&db).await?;
+        // Physical layout and migration ledger of the version before this fix.
+        db.execute_unprepared(
+            "ALTER TABLE book DROP COLUMN applied_without_date;
+            ALTER TABLE book_history DROP COLUMN applied_without_date;
+            DELETE FROM seaql_migrations WHERE version = 'm20261114_000004_upgrade_legacy_tables'",
+        )
+        .await?;
+        Migrator::up(&db, None).await?;
+        let repo = infra::publisher::SqlRepository::new(db.clone());
+        let mut publisher = repo.find_by_pub_id(original.pub_id()).await?.unwrap();
+        assert_eq!(publisher.revision(), original.revision());
+        publisher.update(
+            publisher::vo::PublisherName::new("Updated".into())?,
+            Uuid::new_v4(),
+        )?;
+        assert!(repo.update(publisher).await?);
+        let history = infra::publisher_history::Entity::find().all(&db).await?;
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.iter().map(|row| row.revision).max(), Some(1));
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
+async fn annual_totals_use_utc_and_filter_before_aggregating() -> anyhow::Result<()> {
+    with_database(|db| async move {
+        Migrator::up(&db, None).await?;
+        db.execute_unprepared("SET TIME ZONE 'Asia/Tokyo'").await?;
+        let publisher = create_publisher(&db).await?;
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let txn = db.begin_with_user(&owner).await?;
+        for (id, date) in [
+            (owner, Some("2025-01-01T00:15:00+09:00")),
+            (owner, Some("2024-07-01T00:00:00Z")),
+            (other, Some("2025-01-01T12:00:00Z")),
+            (other, None),
+        ] {
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "INSERT INTO book (pub_id, title, author, publisher_id, format, price, applied_at,
+                                   created_at, updated_at, created_by, updated_by, user_id)
+                 VALUES ($1, 'Book', 'A', $2, 'Real', 2147483647, $3::text::timestamptz,
+                         now(), now(), $4, $4, $4)",
+                [
+                    Uuid::new_v4().into(),
+                    publisher.id().into(),
+                    date.into(),
+                    id.into(),
+                ],
+            ))
+            .await?;
+        }
+        txn.commit().await?;
+        let books = infra::book::SqlRepository::new(db);
+        let totals = books
+            .annual_totals(book::ListFilter::OwnedBy(owner))
+            .await?;
+        let first_year = book::AnnualTotals {
+            year: 2024,
+            count: 2,
+            total_amount: 4_294_967_294,
+        };
+        let second_year = book::AnnualTotals {
+            year: 2025,
+            count: 1,
+            total_amount: 2_147_483_647,
+        };
+        assert_eq!(totals.as_slice(), std::slice::from_ref(&first_year));
+        let all = books.annual_totals(book::ListFilter::All).await?;
+        assert_eq!(all, [first_year, second_year]);
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
@@ -241,7 +487,7 @@ async fn migrations_upgrade_existing_books_and_preserve_history() -> anyhow::Res
         assert_eq!(history.len(), 2);
         assert_eq!(history.iter().map(|entry| entry.revision).max(), Some(1));
 
-        Migrator::down(&db, Some(2)).await?;
+        Migrator::down(&db, Some(3)).await?;
         Migrator::up(&db, None).await?;
         assert!(repo.find_by_pub_id(pub_id).await?.is_some());
         Ok(())
@@ -310,7 +556,7 @@ async fn master_repositories_reject_stale_updates_and_deletes() -> anyhow::Resul
 #[tokio::test]
 #[ignore = "requires DATABASE_URL pointing to PostgreSQL"]
 async fn simultaneous_book_edits_have_one_winner() -> anyhow::Result<()> {
-    with_database(|db| async move {
+    with_connections(3, |db| async move {
         Migrator::up(&db, None).await?;
         let publisher = create_publisher(&db).await?;
         let user_id = *publisher.created_by();
@@ -348,7 +594,40 @@ async fn simultaneous_book_edits_have_one_winner() -> anyhow::Result<()> {
             book::vo::BookPrice::new(300)?,
             user_id,
         )?;
-        let (left, right) = tokio::join!(repo.update(left), repo.update(right));
+        // Hold the row until both writers have reached UPDATE on separate DB
+        // connections. The schema is unique to this test.
+        let gate = db.begin().await?;
+        gate.query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT id FROM book WHERE pub_id = $1 FOR UPDATE",
+            [pub_id.into()],
+        ))
+        .await?;
+        let release = async move {
+            let ready = tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let row = gate
+                        .query_one_raw(Statement::from_string(
+                            DbBackend::Postgres,
+                            "SELECT count(*)::integer AS writers FROM pg_locks
+                         WHERE relation = 'book'::regclass AND mode = 'RowExclusiveLock'
+                           AND granted AND pid <> pg_backend_pid()",
+                        ))
+                        .await?
+                        .unwrap();
+                    if row.try_get::<i32>("", "writers")? == 2 {
+                        return Ok::<_, sea_orm::DbErr>(());
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await;
+            gate.rollback().await?;
+            ready??;
+            Ok::<_, anyhow::Error>(())
+        };
+        let (left, right, released) = tokio::join!(repo.update(left), repo.update(right), release);
+        released?;
         let (left, right) = (left?, right?);
         assert_ne!(left, right);
         let winner = repo.find_by_pub_id(pub_id).await?.unwrap();

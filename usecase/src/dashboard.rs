@@ -1,16 +1,9 @@
 use crate::{UserContext, error::UseCaseError};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Arc};
-use time::UtcOffset;
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 const ANNUAL_BUDGET: i64 = 20_000;
-
-#[derive(Default)]
-struct AnnualTotals {
-    count: i64,
-    total_amount: i64,
-}
 
 pub struct Service {
     book_repo: Arc<dyn book::Repository>,
@@ -25,27 +18,16 @@ impl Service {
         &self,
         ctx: &UserContext,
     ) -> Result<Vec<DashboardDto>, UseCaseError> {
-        let books = self
+        let annual_totals = self
             .book_repo
-            .find_all(ctx.book_filter())
+            .annual_totals(ctx.book_filter())
             .await
-            .map_err(|e| UseCaseError::database("list books for annual summary", e))?;
-
-        let mut annual_totals = BTreeMap::<i32, AnnualTotals>::new();
-        for book in books {
-            if let Some(applied_at) = book.applied_at() {
-                let totals = annual_totals
-                    .entry(applied_at.to_offset(UtcOffset::UTC).year())
-                    .or_default();
-                totals.count += 1;
-                totals.total_amount += i64::from(book.price());
-            }
-        }
+            .map_err(|e| UseCaseError::database("aggregate annual book totals", e))?;
 
         Ok(annual_totals
             .into_iter()
-            .map(|(year, totals)| DashboardDto {
-                year,
+            .map(|totals| DashboardDto {
+                year: totals.year,
                 limit: ANNUAL_BUDGET,
                 total_amount: totals.total_amount,
                 balance: ANNUAL_BUDGET - totals.total_amount,
@@ -95,6 +77,13 @@ mod tests {
 
     #[async_trait]
     impl book::Repository for FakeBookRepository {
+        async fn annual_totals(
+            &self,
+            filter: book::ListFilter,
+        ) -> anyhow::Result<Vec<book::AnnualTotals>> {
+            Ok(crate::tests::annual_totals(self.find_all(filter).await?))
+        }
+
         async fn find_all(&self, filter: book::ListFilter) -> anyhow::Result<Vec<book::Book>> {
             Ok(self
                 .store

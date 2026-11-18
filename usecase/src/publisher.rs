@@ -4,6 +4,8 @@ use std::sync::Arc;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+const DUPLICATE_NAME: &str = "同じ名前の出版社がすでに登録されています。";
+
 pub struct Service {
     repo: Arc<dyn publisher::Repository>,
 }
@@ -44,7 +46,7 @@ impl Service {
         self.repo
             .create(publisher)
             .await
-            .map_err(|e| UseCaseError::database("create publisher", e))
+            .map_err(|e| UseCaseError::name_write("create publisher", DUPLICATE_NAME, e))
     }
 
     pub async fn update(
@@ -74,7 +76,7 @@ impl Service {
             .repo
             .update(publisher)
             .await
-            .map_err(|e| UseCaseError::database("update publisher", e))?;
+            .map_err(|e| UseCaseError::name_write("update publisher", DUPLICATE_NAME, e))?;
         UseCaseError::check_write(updated)
     }
 

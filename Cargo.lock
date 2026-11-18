@@ -3138,6 +3138,7 @@ dependencies = [
  "reqwest",
  "sea-orm",
  "shop",
+ "tempfile",
  "time",
  "tokio",
  "tower-cookies",

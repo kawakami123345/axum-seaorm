@@ -128,16 +128,19 @@ impl Service {
         pub_id: Uuid,
         dto: UpdateDto,
     ) -> Result<(), UseCaseError> {
-        let title = book::vo::BookTitle::new(dto.title)?;
+        let mut book = self.find_book(ctx, pub_id).await?;
+        UseCaseError::check_revision(dto.revision, book.revision())?;
+        let title = if dto.title == book.title() {
+            book::vo::BookTitle::from_storage(dto.title)?
+        } else {
+            book::vo::BookTitle::new(dto.title)?
+        };
         let author = book::vo::BookAuthor::new(dto.author)?;
         let price = book::vo::BookPrice::new(dto.price)?;
         let format = match dto.format.as_deref() {
             Some("EBook") => book::vo::BookFormat::EBook,
             _ => book::vo::BookFormat::Real,
         };
-
-        let mut book = self.find_book(ctx, pub_id).await?;
-        UseCaseError::check_revision(dto.revision, book.revision())?;
 
         let publisher = if book.publisher().pub_id() != dto.publisher_id {
             self.find_publisher(dto.publisher_id).await?
@@ -262,6 +265,9 @@ pub struct ResponseDto {
     #[schema(value_type = Option<String>, example = "2024-01-01T00:00:00Z")]
     #[serde(default, with = "time::serde::rfc3339::option")]
     pub applied_at: Option<time::OffsetDateTime>,
+    /// An application recorded by the original system without a date.
+    #[serde(default)]
+    pub applied_without_date: bool,
     #[schema(value_type = String, example = "Real")]
     pub format: String,
     pub price: i32,
@@ -289,6 +295,7 @@ impl From<&book::Book> for ResponseDto {
                 name: s.name().to_string(),
             }),
             applied_at: book.applied_at(),
+            applied_without_date: book.applied_without_date(),
             format: book.format().to_string(),
             price: book.price(),
         }
@@ -331,6 +338,13 @@ mod tests {
 
     #[async_trait]
     impl book::Repository for FakeRepository {
+        async fn annual_totals(
+            &self,
+            filter: book::ListFilter,
+        ) -> anyhow::Result<Vec<book::AnnualTotals>> {
+            Ok(crate::tests::annual_totals(self.find_all(filter).await?))
+        }
+
         async fn find_all(&self, filter: book::ListFilter) -> anyhow::Result<Vec<book::Book>> {
             let store = self.store.lock().unwrap();
             Ok(store
@@ -357,6 +371,7 @@ mod tests {
                 item.publisher().clone(),
                 item.shop().clone(),
                 item.applied_at(),
+                item.applied_without_date(),
                 item.format(),
                 book::vo::BookPrice::new(item.price()).unwrap(),
                 item.created_at(),
@@ -388,6 +403,7 @@ mod tests {
                     item.publisher().clone(),
                     item.shop().clone(),
                     item.applied_at(),
+                    item.applied_without_date(),
                     item.format(),
                     book::vo::BookPrice::new(item.price()).unwrap(),
                     item.created_at(),

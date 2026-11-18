@@ -1,6 +1,23 @@
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
+pub(crate) fn annual_totals(books: Vec<book::Book>) -> Vec<book::AnnualTotals> {
+    let mut years = std::collections::BTreeMap::new();
+    for book in books {
+        if let Some(at) = book.applied_at() {
+            let year = at.to_offset(time::UtcOffset::UTC).year();
+            let totals = years.entry(year).or_insert(book::AnnualTotals {
+                year,
+                count: 0,
+                total_amount: 0,
+            });
+            totals.count += 1;
+            totals.total_amount += i64::from(book.price());
+        }
+    }
+    years.into_values().collect()
+}
+
 fn rejects_unversioned_or_identity_updates<T: DeserializeOwned>(value: Value) {
     assert!(serde_json::from_value::<T>(value.clone()).is_ok());
     let mut missing_revision = value.clone();

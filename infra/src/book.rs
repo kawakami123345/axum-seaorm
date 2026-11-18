@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Condition, IntoCondition, StringLen};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 
 use crate::BeginWithUser;
 
@@ -30,6 +32,8 @@ pub struct Model {
     pub user_id: Uuid,
     #[sea_orm(default_value = 0)]
     pub revision: i64,
+    #[sea_orm(default_value = false)]
+    pub applied_without_date: bool,
 
     #[sea_orm(belongs_to, from = "publisher_id", to = "id")]
     pub publisher: HasOne<super::publisher::Entity>,
@@ -41,7 +45,7 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl ModelEx {
     fn to_domain(&self) -> anyhow::Result<book::Book> {
-        let title = book::vo::BookTitle::new(self.title.clone())
+        let title = book::vo::BookTitle::from_storage(self.title.clone())
             .map_err(|e| anyhow::anyhow!("Invalid title in DB: {}", e))?;
         let author = book::vo::BookAuthor::new(self.author.clone())
             .map_err(|e| anyhow::anyhow!("Invalid author in DB: {}", e))?;
@@ -99,6 +103,7 @@ impl ModelEx {
             publisher,
             shop,
             self.applied_at,
+            self.applied_without_date,
             format,
             price,
             self.created_at,
@@ -124,12 +129,40 @@ impl SqlRepository {
 fn book_filter_condition(filter: book::ListFilter) -> Condition {
     match filter {
         book::ListFilter::All => Condition::all(),
+        book::ListFilter::OwnedBy(user_id) if user_id.is_nil() => Condition::any(),
         book::ListFilter::OwnedBy(user_id) => Column::UserId.eq(user_id).into_condition(),
     }
 }
 
 #[async_trait]
 impl book::Repository for SqlRepository {
+    async fn annual_totals(
+        &self,
+        filter: book::ListFilter,
+    ) -> anyhow::Result<Vec<book::AnnualTotals>> {
+        let year = Expr::cust("EXTRACT(YEAR FROM applied_at AT TIME ZONE 'UTC')::integer");
+        let rows = Entity::find()
+            .select_only()
+            .expr_as(year.clone(), "year")
+            .column_as(Column::Id.count(), "count")
+            .column_as(Column::Price.sum(), "total_amount")
+            .filter(book_filter_condition(filter))
+            .filter(Column::AppliedAt.is_not_null())
+            .group_by(year.clone())
+            .order_by_asc(year)
+            .into_tuple::<(i32, i64, i64)>()
+            .all(&self.db)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(year, count, total_amount)| book::AnnualTotals {
+                year,
+                count,
+                total_amount,
+            })
+            .collect())
+    }
+
     async fn find_all(&self, filter: book::ListFilter) -> anyhow::Result<Vec<book::Book>> {
         Entity::load()
             .filter(book_filter_condition(filter))
@@ -187,6 +220,7 @@ impl book::Repository for SqlRepository {
             .set_author(item.author().to_string())
             .set_price(item.price())
             .set_applied_at(item.applied_at())
+            .set_applied_without_date(item.applied_without_date())
             .set_format(item.format().to_string())
             .set_updated_at(item.updated_at())
             .set_updated_by(*item.updated_by())

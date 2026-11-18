@@ -88,6 +88,41 @@ test("retries a failed book list without treating it as an empty list", async ({
   ).toBeVisible();
 });
 
+for (const resource of ["book", "publisher"] as const) {
+  test(`keeps a ${resource} draft when the list refetch after a conflict fails`, async ({
+    page,
+  }) => {
+    const state = await mockApi(page);
+    const book = resource === "book";
+    await page.goto(book ? "/library" : "/publishers");
+    await page
+      .getByRole("button", {
+        name: book
+          ? "書籍「Original Book」を編集"
+          : "出版社「Test Publisher」を編集",
+      })
+      .click();
+    const dialog = page.getByRole("dialog");
+    const field = dialog.getByLabel(book ? "タイトル" : "出版社名", {
+      exact: true,
+    });
+    await field.fill("My draft");
+    (book ? state.books[0]! : state.publishers[0]!).revision += 1;
+    if (book) state.failBooks = true;
+    else state.failPublishers = true;
+    await dialog.getByRole("button", { name: "更新する" }).click();
+    await expect(page.getByText(/前回の一覧を表示しています/)).toBeVisible({
+      timeout: 12000,
+    });
+    await expect(field).toHaveValue("My draft");
+    state.failBooks = state.failPublishers = false;
+    await dialog.getByRole("button", { name: "更新する" }).click();
+    await expect(page.getByText(/前回の一覧を表示しています/)).toHaveCount(0);
+    await expect(field).toHaveValue("My draft");
+    await expect(dialog.getByRole("alert")).toContainText("再読み込み");
+  });
+}
+
 test("keeps a stale book edit version until the user reopens the latest record", async ({
   page,
 }) => {

@@ -177,19 +177,19 @@ test("resets editor fields after cancelling and restores keyboard focus", async 
 test("shows publisher save errors inline, preserves input, and supports retry", async ({
   page,
 }) => {
-  const state = await mockApi(page);
-  state.failNextPublisherSave = true;
+  await mockApi(page);
   await page.goto("/publishers");
   await page.getByRole("button", { name: "出版社を追加" }).click();
   const dialog = page.getByRole("dialog", { name: "新しい出版社を追加" });
-  await dialog.getByLabel("出版社名", { exact: true }).fill("Retry Publisher");
+  await dialog.getByLabel("出版社名", { exact: true }).fill("Test Publisher");
   await dialog.getByRole("button", { name: "保存する" }).click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "Publisher name already exists",
+    "同じ名前の出版社がすでに登録されています。",
   );
   await expect(dialog.getByLabel("出版社名", { exact: true })).toHaveValue(
-    "Retry Publisher",
+    "Test Publisher",
   );
+  await dialog.getByLabel("出版社名", { exact: true }).fill("Retry Publisher");
   await dialog.getByRole("button", { name: "保存する" }).click();
   await expect(dialog).not.toBeVisible();
   await expect(
@@ -216,10 +216,45 @@ test("rejects impossible expense dates and refreshes the annual summary after ap
   page.once("dialog", (dialog) => dialog.accept("2024-12-31"));
   await page.getByRole("button", { name: "申請", exact: true }).click();
   await expect(page.getByText("申請済", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "申請日" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "書籍「Original Book」を編集" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "書籍「Original Book」の詳細を表示" })
+    .click();
+  const details = page.getByRole("dialog", { name: "申請済み書籍の詳細" });
+  await expect(details.getByText("2024/12/31")).toBeVisible();
+  await expect(details.getByRole("button", { name: "更新する" })).toHaveCount(
+    0,
+  );
+  await details.getByRole("button", { name: "閉じる" }).click();
   await expect(page.getByText("2024年度", { exact: true })).toBeVisible();
   expect(state.appliedWrites).toEqual([
     { applied_at: "2024-12-31T00:00:00.000Z", revision: 0 },
   ]);
+});
+
+test("shows an undated legacy application as read-only in the library", async ({
+  page,
+}) => {
+  const state = await mockApi(page);
+  state.books[0]!.applied_without_date = true;
+  await page.goto("/library");
+  const row = page.getByRole("row").filter({ hasText: "Original Book" });
+  await expect(row).toContainText("日付不明");
+  await expect(
+    row.getByRole("button", { name: "申請", exact: true }),
+  ).toHaveCount(0);
+  await row
+    .getByRole("button", { name: "書籍「Original Book」の詳細を表示" })
+    .click();
+  const details = page.getByRole("dialog", { name: "申請済み書籍の詳細" });
+  await expect(details.getByText("日付不明")).toBeVisible();
+  await expect(details.getByRole("textbox")).toHaveCount(0);
+  expect(state.appliedWrites).toHaveLength(0);
 });
 
 test("redirects expired sessions to the login page", async ({ page }) => {
@@ -233,4 +268,44 @@ test("redirects expired sessions to the login page", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "ログイン", exact: true }),
   ).toBeVisible();
+});
+
+test("shows callback errors and starts login again only on request", async ({
+  page,
+}) => {
+  await page.route("https://**/*", (route) => route.abort());
+  await page.route("**/api/login", (route) =>
+    route.fulfill({ body: "OIDC login" }),
+  );
+  await page.goto("/login?error=token_exchange_failed");
+  await expect(page.getByRole("alert")).toContainText(
+    "認証サービスとの通信に失敗",
+  );
+  await page.getByRole("button", { name: "ログインをやり直す" }).click();
+  await expect(page).toHaveURL(/\/api\/login$/);
+});
+
+test("posts logout with CSRF before navigating to the provider", async ({
+  page,
+}) => {
+  await mockApi(page);
+  const methods: string[] = [];
+  await page.route("**/api/logout", async (route) => {
+    methods.push(route.request().method());
+    expect(route.request().headers()["x-csrf-token"]).toBe("test-csrf");
+    if (methods.length === 1)
+      return route.fulfill({ status: 500, json: { error: "一時エラー" } });
+    return route.fulfill({
+      json: { redirect_url: "https://issuer.test/logout" },
+    });
+  });
+  await page.route("https://issuer.test/logout", (route) =>
+    route.fulfill({ body: "Signed out" }),
+  );
+  await page.goto("/library");
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect(page.getByRole("alert")).toContainText("一時エラー");
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect(page).toHaveURL("https://issuer.test/logout");
+  expect(methods).toEqual(["POST", "POST"]);
 });
