@@ -1,5 +1,4 @@
 [settings]
-experimental = true
 lockfile = true
 
 [tools]
@@ -8,46 +7,15 @@ bun = "latest"
 node = "26"
 codex = "latest"
 orval = "latest"
-java = "temurin-25"
-postgres = "17"
-pitchfork = "2.34.0"
-"github:keycloak/keycloak" = { version = "26.8.2", asset_pattern = "keycloak-{{ version }}.zip" }
 
 [env]
 APP_URL = "http://localhost:3000"
 DEV_COOKIE_KEY_FILE = "{{config_root}}/.data/cookie.key"
+DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/rust_web_db"
 OIDC_CLIENT_ID = "rust_web"
 OIDC_CLIENT_SECRET = "supersecret123"
 OIDC_ISSUER_URL = "http://localhost:8080/realms/rust-web-realm"
 OIDC_LOGOUT_URL = "http://localhost:8080/realms/rust-web-realm/protocol/openid-connect/logout"
-KC_BOOTSTRAP_ADMIN_USERNAME = "admin"
-KC_BOOTSTRAP_ADMIN_PASSWORD = "admin"
-KC_HOSTNAME = "http://localhost:8080"
-KC_HTTP_HOST = "127.0.0.1"
-# Keep Keycloak's database in this checkout, independently of the installed tool.
-KC_DB_URL = "jdbc:h2:file:./.data/keycloak/keycloakdb;NON_KEYWORDS=VALUE"
-
-[daemons.postgres]
-preset = "postgres"
-version = "17"
-options.database = "rust_web_db"
-
-[daemons.keycloak]
-task = "_keycloak"
-# Wait for the imported realm, not just the HTTP port.
-ready_cmd = [
-    "node",
-    "-e",
-    "fetch('http://127.0.0.1:8080/realms/rust-web-realm/.well-known/openid-configuration', {signal: AbortSignal.timeout(2000)}).then(async r => process.exit(r.ok && (await r.json()).issuer === 'http://localhost:8080/realms/rust-web-realm' ? 0 : 1)).catch(() => process.exit(1))",
-]
-
-[tasks._keycloak]
-description = "Run the local Keycloak service"
-hide = true
-dir = "{{config_root}}"
-# Import without replacing an existing realm; Keycloak keeps its data between starts.
-run = ["kc.sh import --file config/keycloak/realm.json --override false", "kc.sh start-dev"]
-run_windows = ["kc.bat import --file config/keycloak/realm.json --override false", "kc.bat start-dev"]
 
 [tasks.setup]
 description = "Install frontend dependencies from the Bun lockfile"
@@ -65,15 +33,30 @@ description = "Export OpenAPI without starting the API or connecting to services
 dir = "{{config_root}}"
 run = "cargo run --quiet --locked -p api --example export_openapi -- openapi.json"
 
+[tasks."services:up"]
+description = "Start PostgreSQL and Keycloak with Docker Compose"
+dir = "{{config_root}}"
+run = ["docker compose up -d --wait", "node scripts/wait-for-keycloak.mjs"]
+
+[tasks."services:postgres"]
+description = "Start PostgreSQL with Docker Compose"
+dir = "{{config_root}}"
+run = "docker compose up -d --wait postgres"
+
+[tasks."services:down"]
+description = "Stop the Docker Compose services"
+dir = "{{config_root}}"
+run = "docker compose down"
+
 [tasks.dev]
 description = "Start the backend and frontend together (Ctrl+C stops both)"
 depends = ["dev:backend", "dev:frontend"]
 
 [tasks."dev:backend"]
 description = "Start the API and apply database migrations"
+depends = ["services:up"]
 # Wait for client generation when both servers are requested; API-only runs do not need it.
 wait_for = ["orval"]
-daemons = ["postgres", "keycloak"]
 dir = "{{config_root}}"
 run = "cargo run --locked"
 
@@ -108,7 +91,7 @@ run = "bun run test:browser"
 
 [tasks."test:database"]
 description = "Run PostgreSQL integration tests in isolated schemas"
-daemons = ["postgres"]
+depends = ["services:postgres"]
 dir = "{{config_root}}"
 run = "cargo test --locked --test postgres -- --include-ignored"
 

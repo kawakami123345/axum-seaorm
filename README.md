@@ -56,43 +56,40 @@ Orvalのツール定義と生成コマンドは`mise.toml`で管理し、`web/pa
 `mise run orval`はOpenAPIの書き出しからクライアント生成まで実行します。
 `mise run openapi`でOpenAPIだけを書き出すこともできます。DBやKeycloakの起動は不要です。
 
-Postgresとの日時の読み書きは、開発DBの接続情報を使って確認できます。永続データの書き込みは行いません。
+Postgresとの日時の読み書きは、Composeの開発DBを使って確認できます。永続データの書き込みは行いません。
 
 ```bash
-mise daemons start postgres
+mise run services:postgres
 mise exec -- cargo test -p infra --features test postgres_timestamp_round_trip -- --ignored
 ```
 
 ## 開発環境
 
-開発用ツール、PostgreSQL、Keycloak、開発コマンドをmiseで管理し、ホスト上で実行します。
+開発用ツールとコマンドはmiseで管理し、PostgreSQLとKeycloakはDocker Composeで起動します。
+APIとフロントエンドは引き続きホスト上で実行します。
 
 | 設定 | 管理するもの |
 | --- | --- |
-| `mise.toml` | ツール・サービスのバージョン、開発用の接続情報、開発・検証コマンド |
+| `mise.toml` | 開発用ツール、接続情報、開発・検証コマンド |
 | `mise.lock`・`.mise/locks/` | miseで解決したツールのバージョン・チェックサムと、Orvalの依存関係 |
-| `config/keycloak/realm.json` | 初回にインポートする開発用Realm・OIDCクライアント・ユーザー |
+| `compose.yaml` | PostgreSQL・Keycloakのイメージ、ポート、データ領域 |
+| `config/keycloak/realm.json` | Keycloak初回起動時にインポートする開発用Realm・OIDCクライアント・ユーザー |
 | `.vscode/` | VS Codeの推奨拡張とESLint設定 |
 
-サービスの管理にはmiseの実験的なdaemon機能とpitchforkを使います。PostgreSQLはmiseの
-プリセットで起動し、接続先の`DATABASE_URL`も自動設定されます。KeycloakはJavaとともに
-miseでインストールし、起動時にRealmをインポートします。設定は開発用です。
-ローカルだけの設定はGit管理外の`mise.local.toml`で上書きできます。
+Docker Engineと`docker compose`をホストに用意してください。接続先や認証情報はローカル開発用です。
+必要ならGit管理外の`mise.local.toml`でmiseの環境変数を上書きできます。
 
 `mise.toml`の`[settings] lockfile = true`により、`mise install`やツール更新時に`mise.lock`を
-自動生成・更新します。設定ファイルの編集だけでは生成されません。既存のlockfileがある場合は、
-`latest`や`26`、`17`という指定でも解決済みのバージョンを使います。
+自動生成・更新します。既存のlockfileがある場合は、`latest`という指定でも解決済みのバージョンを使います。
 対応する最新バージョンへ更新するときは`mise lock --bump`、続いて`mise install`を実行します。
 `mise.lock`と生成された`.mise/locks/`はGitで管理します。`Cargo.lock`・`web/bun.lock`は
 アプリの依存関係を固定します。詳細は[miseのlockfileの説明](https://mise.jdx.dev/dev-tools/mise-lock.html)を参照してください。
 
 ## 起動
 
-ホストに[mise](https://mise.jdx.dev/getting-started.html)を用意します。daemon機能に対応する
-mise 2026.11.2以降を使ってください。WindowsではRustのビルドにVisual Studio Build Toolsの
+ホストに[mise](https://mise.jdx.dev/getting-started.html)を用意します。WindowsではRustのビルドにVisual Studio Build Toolsの
 C++ツールとWindows SDKが必要です。LinuxではCコンパイラ、`pkg-config`、OpenSSLの開発用
-ライブラリが必要です。PostgreSQLは管理者権限では起動できないため、通常のユーザーで実行します。
-エディターや`mise exec`を使わないコマンドからもツールを使う場合は、miseの
+ライブラリが必要です。エディターや`mise exec`を使わないコマンドからもツールを使う場合は、miseの
 [シェル設定](https://mise.jdx.dev/faq.html#how-to-get-mise-working-with-my-ide)またはshimsを設定します。
 
 リポジトリのルートで以下を実行します。
@@ -104,27 +101,28 @@ mise run setup
 mise run dev
 ```
 
-`dev`はPostgreSQLとKeycloakの準備を待ってからAPIとViteを起動します。API起動時にはDBの
-マイグレーションを適用します。Ctrl+CでAPIとViteが停止します。PostgreSQLとKeycloakは
-再利用のため起動したままなので、不要になったら`mise daemons stop`で停止してください。
-`mise daemons status`で状態、`mise daemons logs keycloak`などでログを確認できます。
+`dev`はComposeのPostgreSQLとKeycloakが利用可能になるのを待ってからAPIとViteを起動します。
+API起動時にはDBのマイグレーションを適用します。Ctrl+CでAPIとViteが停止します。
+サービスの起動・停止には`mise run services:up`と`mise run services:down`を使えます。
+コンテナの状態とログは`docker compose ps`、`docker compose logs -f keycloak`で確認できます。
 
 | サービス | URL / 接続先 |
 | --- | --- |
 | フロントエンド | http://localhost:5173 |
 | API / Swagger UI | http://localhost:3000/swagger-ui/ |
 | Keycloak管理画面 | http://localhost:8080/admin/ |
-| PostgreSQL | `postgresql://postgres@127.0.0.1:5432/rust_web_db` |
+| PostgreSQL | `postgresql://postgres:postgres@127.0.0.1:5432/rust_web_db` |
 
 新規環境でのアプリとKeycloak管理画面のログインは、どちらも`admin` / `admin`です。
-PostgreSQLはローカル接続を信頼認証で受け付けます。設定中のパスワードやシークレットと
+PostgreSQLとKeycloakのポートはlocalhostだけに公開しています。設定中のパスワードやシークレットと
 あわせてローカル開発専用です。
 
-PostgreSQLのデータはmiseの状態ディレクトリに保存されます。`mise daemons ls --json`の
-`data_dir`で場所を確認できます。KeycloakのデータはGit管理外の`.data/keycloak/`に保存されます。
-サービスを停止しても両方のデータは残ります。Realmは既存の場合はインポートをスキップするため、
-定義変更後は管理画面から既存Realmを更新してください。PostgreSQLのメジャーバージョン変更時は
-既存データの移行が必要です。
+PostgreSQLのデータはComposeの`postgres_data`ボリュームに保存されます。KeycloakはGit管理外の
+`.data/keycloak/`を使い、これまでのKeycloak 26.8.2のH2データも引き継ぎます。サービスを停止しても
+データは残ります。Realmは既存の場合はインポートをスキップするため、定義変更後は管理画面から
+既存Realmを更新してください。PostgreSQLのメジャーバージョンを変える場合はデータ移行が必要です。
+以前のmise PostgreSQLデータはComposeへ自動移行されません。必要な場合は旧DBから`pg_dump`を取り、
+Composeの空のDBへ`pg_restore`してください。元のmise状態ディレクトリは削除しないでください。
 
 ## 開発コマンド
 
@@ -140,40 +138,30 @@ mise run test          # Rustワークスペースのテスト
 mise run test:frontend # フロントエンドの単体テスト
 mise run test:browser  # Chromiumで画面操作を検証
 mise run test:database # PostgreSQLを起動し、専用スキーマでDB操作・移行を検証
+mise run services:up   # PostgreSQLとKeycloakを起動
+mise run services:down # コンテナを停止（データは保持）
 ```
 
 `test:database`の各テストは一意なスキーマを作成し、終了時に削除します。
 既存の開発用テーブルは変更しません。
 
-## 以前のDev Containerからデータを移す
-
-以前のDockerボリュームはそのまま残り、新しい環境へは自動で読み込まれません。
-必要な場合は、アプリとKeycloakを停止し、PostgreSQLの新しいDBが空のうちに移行してください。
-以下は以前のコンテナ名が残っている場合のPowerShellでの例です。すでに新環境にデータがある場合は、
-先にバックアップを取り、空のDBを用意してください。Keycloakの移行は同じ26.8.2のデータに限ります。
+以前のmise PostgreSQLのデータを引き継ぐ場合は、設定を切り替える前に旧環境でダンプを作成し、
+PostgreSQLとKeycloakを停止してください。KeycloakのH2データは`.data/keycloak/`からそのまま使います。
 
 ```powershell
-if (Test-Path .data/keycloak/keycloakdb.mv.db) { throw 'Keycloakの移行先にデータがあります' }
-mise.exe daemons start postgres
-$taskTables = mise.exe exec -- psql -h 127.0.0.1 -p 5432 -U postgres -d rust_web_db -Atc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S')"
-if ($LASTEXITCODE -ne 0 -or [int]$taskTables -ne 0) { throw 'PostgreSQLの移行先が空ではないか接続できません' }
-
-mise.exe daemons stop keycloak
-docker stop axum-seaorm-dev-keycloak-1
-docker start axum-seaorm-dev-postgres-1
-docker exec axum-seaorm-dev-postgres-1 pg_dump -U user -d rust_web_db -Fc -f /tmp/rust-web.dump
-if ($LASTEXITCODE -ne 0) { throw '旧DBのダンプに失敗しました' }
-docker cp axum-seaorm-dev-postgres-1:/tmp/rust-web.dump "$env:TEMP/rust-web.dump"
-if ($LASTEXITCODE -ne 0) { throw 'ダンプのコピーに失敗しました' }
-docker stop axum-seaorm-dev-postgres-1
-
-mise.exe exec -- pg_restore --no-owner --no-acl --exit-on-error --single-transaction -h 127.0.0.1 -p 5432 -U postgres -d rust_web_db "$env:TEMP/rust-web.dump"
-if ($LASTEXITCODE -ne 0) { throw '新DBへの復元に失敗しました' }
-
-New-Item -ItemType Directory -Force .data/keycloak | Out-Null
-docker cp axum-seaorm-dev-keycloak-1:/opt/keycloak/data/h2/keycloakdb.mv.db .data/keycloak/keycloakdb.mv.db
-if ($LASTEXITCODE -ne 0) { throw 'Keycloakデータのコピーに失敗しました' }
+mise exec -- pg_dump -h 127.0.0.1 -p 5432 -U postgres -d rust_web_db -Fc -f .data/postgres-mise.dump
+mise daemons stop keycloak
+mise daemons stop postgres
 ```
 
-移行後は`mise run dev`で起動します。以前のKeycloakに登録したユーザーと認証情報はそのまま使います。
-元のDockerボリュームは、移行を確認するまで削除せず保管してください。
+新しい設定へ切り替えた後、APIを起動する前に空のCompose DBへ復元します。
+
+```powershell
+mise run services:postgres
+$containerId = docker compose ps -q postgres
+docker cp .data/postgres-mise.dump "${containerId}:/tmp/postgres-mise.dump"
+docker compose exec -T postgres pg_restore --no-owner --no-acl --exit-on-error --single-transaction -U postgres -d rust_web_db /tmp/postgres-mise.dump
+```
+
+すでにデータのあるCompose DBへ復元しないでください。元のmise状態ディレクトリとダンプは、
+移行を確認するまで削除しないでください。
